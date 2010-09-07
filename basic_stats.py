@@ -45,7 +45,7 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lam):
     f = 1. - exp(-ntarget / mu)
     r = numpy.random.random_sample(n * nstrain) # random x from 0 - 1
     start = (-mu) * numpy.log(1. - f * r) # location of 1st target mutation
-    waitTime = waiting_times(2. * n * nstrain * ntarget * lam, 1. / lam)
+    waitTime = waiting_times(2. * n * nstrain * ntarget * lam, mu)
     pois = stats.poisson(nstrain * lam)
     istart = 0
     ngood = nok = 0
