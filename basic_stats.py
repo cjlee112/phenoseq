@@ -41,10 +41,10 @@ def expon_screen(nstrain, ntarget, start, waitTime, pFail):
                 k = int(x)
                 realhits[k] = realhits.get(k, 0) + 1
             x += waitTime.next()
-    try:
-        return max(realhits.values())
-    except ValueError: # no hits at all
-        return 0
+    if len(realhits) > 0:
+        return numpy.array(realhits.values())
+    else: # no hits at all
+        return numpy.array((0,))
 
 
 def poisson_screen(nstrain, ntarget, pois):
@@ -56,12 +56,16 @@ def poisson_screen(nstrain, ntarget, pois):
             if hits.max() > 0:
                 break
         realhits += hits
-    return realhits.max()
+    return realhits
 
+def fast_screen(ntarget, pois):
+    'assumes every strain will pass screen, so model all strains as a group'
+    return pois.rvs(ntarget)
 
-def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
-                  lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1):
-    '''Compute fraction of best hits that are real targets in
+def sample_maxhit_gen(n, nstrain, ntarget, ngene, lambdaTrue,
+                      lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1,
+                      pFast=0.1):
+    '''generate lists of hit counts in real targets vs. nontargets in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.
     n: number of replicates
@@ -76,8 +80,14 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
     pFail: probability that true mutation detection will fail'''
     lam = lambdaTrue * (1. - pFail) + lambdaError
     pois = stats.poisson(nstrain * lam)
-    if stats.poisson(ntarget * lam).pmf(0) > pPoisson: # use waiting times
-        usePoisson = False
+    p = stats.poisson(ntarget * lam).pmf(0)
+    usePoisson = useFast = False
+    if p * nstrain < pFast: # use fast screen approximation
+        useFast = True
+    elif p < pPoisson: # use Poisson screen
+        usePoisson = True
+        poisTarget = stats.poisson(lam)
+    else: # use waiting times
         lam = lambdaTrue + lambdaError
         mu = 1. / lam # mean waiting time parameter
         f = 1. - exp(-ntarget / mu)
@@ -85,17 +95,30 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
         start = (-mu) * numpy.log(1. - f * r) # location of 1st target mutation
         startIter = iter(start)
         waitTime = waiting_times(nwait, mu)
-    else: # use Poisson screen
-        usePoisson = True
-        poisTarget = stats.poisson(lam)
-    ngood = nok = 0
-    for i in xrange(n):
-        if usePoisson:
-            maxreal = poisson_screen(nstrain, ntarget, poisTarget)
+    for i in xrange(n): # analyze replicates
+        if useFast:
+            realhits = fast_screen(nstrain, pois)
+        elif usePoisson:
+            realhits = poisson_screen(nstrain, ntarget, poisTarget)
         else:
-            maxreal = expon_screen(nstrain, ntarget, startIter, waitTime,
-                                   pFail)
+            realhits = expon_screen(nstrain, ntarget, startIter, waitTime,
+                                    pFail)
         nontargets = pois.rvs(ngene - ntarget) # #hits per gene
+        yield realhits, nontargets
+
+
+def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
+                  lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1,
+                  pFast=0.1):
+    '''Compute fraction of best hits that are real targets in
+    multihit screen, using probability of hitting target
+    gene(s) conditioned on requiring at least one such hit.'''
+    ngood = nok = 0
+    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget,
+                                                  ngene, lambdaTrue,
+                                                  lambdaError, pFail,
+                                                  nwait, pPoisson, pFast):
+        maxreal = realhits.max()
         maxbad = nontargets.max()
         if maxreal > maxbad: # real target hit more than any non-target
             ngood += 1
@@ -104,16 +127,85 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
     return float(ngood) / n, float(ngood + nok) / n
 
 
-def calc_cutoff_success(n, nstrain, ntarget, ngene, c=75, npool=4,
-                        epsilon=0.01, cutoffs=range(1,26),
-                        ntrue=50, ntotal=4e+06):
-    '''compute probability that top hit(s) is a real target, as a
-    function of cutoff threshold'''
-    pmf = stats.binom(c, (1. - epsilon) / npool)
-    pmf2 = stats.binom(c, epsilon)
-    pFail = pmf.cdf(numpy.array(cutoffs) - 1) # cdf() offset by one
-    lambdaError = (float(ntotal) / ngene) * pmf2.sf(numpy.array(cutoffs) - 1)
-    return [sample_maxhit(n, nstrain, ntarget, ngene, float(ntrue) / ngene,
-                          lambdaError[i], pFail[i])
-            for i in range(len(cutoffs))]
+def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
+                       lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1,
+                       pFast=0.1, rankCut=0.67):
+    '''Compute distribution of real targets detected above rankCut rank, in
+    multihit screen, using probability of hitting target
+    gene(s) conditioned on requiring at least one such hit.'''
+    d = {}
+    p = 1. / n
+    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget,
+                                                  ngene, lambdaTrue,
+                                                  lambdaError, pFail,
+                                                  nwait, pPoisson, pFast):
+        realhits.sort() # sort top hits to end of array
+        nontargets.sort()
+        ireal = -1
+        ibad = lastReal = 0
+        realend = -len(realhits)
+        end = -(ngene - ntarget)
+        while ireal >= realend:
+            nhits = realhits[ireal]
+            while ireal - 1 >= realend and \
+                  realhits[ireal - 1] == nhits: # count targets w/ nhits
+                ireal -= 1
+            while ibad - 1 >= end and nontargets[ibad - 1] >= nhits:
+                ibad -= 1 # count nontargets with >= nhits
+            if float(ibad) / (ibad + ireal) <= rankCut: # still acceptable
+                lastReal = -ireal # save as latest count of real hits
+            else: # over threshold, so exit
+                break
+            ireal -= 1 
+        d[lastReal] = d.get(lastReal, 0.) + p # update probability dist'n
+    return d
 
+def expectation(d):
+    e = 0.
+    for x, p in d.items():
+        e += x * p
+    return e
+
+class CutoffSuccess(object):
+    def __init__(self, ngene, c=75, npool=4, epsilon=0.01,
+                 cutoffs=range(1,26), ntotal=4e+06):
+        self.pmf = stats.binom(c, (1. - epsilon) / npool)
+        self.pmf2 = stats.binom(c, epsilon)
+        self.pFail = self.pmf.cdf(numpy.array(cutoffs) - 1) # cdf() offset by one
+        self. lambdaError = (float(ntotal) / ngene) \
+                            * self.pmf2.sf(numpy.array(cutoffs) - 1)
+        self.ngene = ngene
+
+    def calc_success(self, n, nstrain, ntarget, ntrue=50):
+        '''compute probability that top hit(s) is a real target, as a
+        function of cutoff threshold'''
+        l = []
+        for i in range(len(self.pFail)):
+            l.append(sample_maxhit(n, nstrain, ntarget, self.ngene,
+                                   float(ntrue) / self.ngene,
+                                   self.lambdaError[i], self.pFail[i]))
+        return l
+
+    def calc_ranks(self, n, nstrain, ntarget, ntrue=50, rankCut=0.67):
+        '''compute expected number of real hit(s) based on rankCut, as a
+        function of cutoff threshold'''
+        l = []
+        for i in range(len(self.pFail)):
+            d = sample_maxhit_rank(n, nstrain, ntarget, self.ngene,
+                                   float(ntrue) / self.ngene,
+                                   self.lambdaError[i], self.pFail[i],
+                                   rankCut=rankCut)
+            l.append(expectation(d))
+        return l
+
+def calc_pooling_success(n, nstrain, ntarget, ngene, c=75,
+                         pools=range(1, 6) + range(7, 20, 2),
+                         epsilon=0.01, cutoffs=range(5,20),
+                         ntrue=50, ntotal=4e+06):
+    results = []
+    for npool in pools:
+        print 'npool=', npool
+        c = CutoffSuccess(ngene, c, npool, epsilon, cutoffs, ntotal)
+        l = c.calc_success(n, nstrain, ntarget, ntrue)
+        results.append(max([t[0] for t in l]))
+    return results
