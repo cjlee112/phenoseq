@@ -1,14 +1,29 @@
 from scipy import stats
 from math import log
 import glob
+import re
+import sys
+try:
+    from scipy import stats
+except ImportError:
+    pass
+try:
+    from Bio import SeqIO
+except ImportError:
+    pass
+try:
+    from pygr import seqdb, annotation, cnestedlist, sequtil
+except ImportError:
+    pass
+    
 
 ''' simple usage example:
 
-laptop:doe leec$ python2.6 -i analyze.py [ACGT]*.vcf
->>> len(tagDict)
-10
->>> sum([len(list(rs)) for rs in tagDict.values()])/32.
-128.09375
+laptop:doe leec$ python2.6 analyze.py NC_000913.gbk [ACGT]*.vcf
+reading gene annotations from NC_000913.gbk
+reading tag files: ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
+scoring genes...
+top 20 hits: [(6.6292398002665553e-23, 'acrB'), (9.5886861652296713e-09, 'marC'), (1.2420147995288613e-07, 'stfP'), (7.5888980168626557e-07, 'ykgC'), (2.4852332221987147e-06, 'aes'), (1.2076613799972474e-05, 'ampH'), (2.677716300626633e-05, 'paoC'), (2.7423615997657459e-05, 'nfrA'), (3.0707657321643245e-05, 'ydhB'), (8.2316128201056232e-05, 'yaiP'), (0.00011947463446331284, 'acrA'), (0.00017183498597744571, 'xanQ'), (0.00017801741636809529, 'ykgD'), (0.0002470441650715134, 'yegQ'), (0.00024848120894985465, 'yfjJ'), (0.00026020746746671289, 'yagX'), (0.00032216191302056855, 'pstA'), (0.00033538869893896079, 'prpE'), (0.00035039080759966868, 'mltF'), (0.00044366190311229754, 'purE')]
 
 '''
 
@@ -127,6 +142,16 @@ class TagDict(dict):
         for tag,args in tagDict.items():
             self[tag] = ReplicateSet(*args)
 
+    def get_snps(self):
+        'get all filtered SNPs sorted in ascending positional order'
+        l = []
+        for tag, rs in self.items():
+            for snp in rs:
+                l.append((snp.pos, tag, snp))
+        l.sort()
+        return l
+
+
 def read_tag_files(tagFiles, tagfunc=lambda s:s.split('.')[0],
                       replicatefunc=lambda s:glob.glob('*_' + s + '.vcf'),
                       *args):
@@ -138,7 +163,93 @@ def read_tag_files(tagFiles, tagfunc=lambda s:s.split('.')[0],
         d[tag] = (tagFile, repFiles) + args
     return TagDict(d)
 
+
+def read_genome_annots(gbfile, iseq=0, featureType='CDS'):
+    features = list(SeqIO.parse(gbfile, 'genbank'))[iseq].features
+    genome = seqdb.SequenceFileDB(gbfile.split('.')[0] + '.fna')
+    seqID = genome.keys()[iseq]
+    annodb = annotation.AnnotationDB({}, genome,
+                                     sliceAttrDict=dict(id=0, start=1, stop=2,
+                                                        orientation=3))
+    for f in features:
+        if f.type == featureType:
+            try:
+                name = f.qualifiers['gene'][0]
+            except KeyError:
+                pass
+            else:
+                annodb.new_annotation(name,
+                    (seqID, f.location.start.position,
+                     f.location.end.position, f.strand))
+    al = cnestedlist.NLMSA('tmp', 'memory', pairwiseMode=True)
+    for a in annodb.itervalues():
+        al.addAnnotation(a)
+    al.build()
+    return annodb, al, genome[seqID]
+
+
+class GeneSNPDict(dict):
+    def __init__(self, tagDict, annodb, al, dna):
+        dict.__init__(self)
+        self.tagDict = tagDict
+        self.annodb = annodb
+        self.al = al
+        self.dna = dna
+        self.nAT = self.nGC = weight = 0
+        rc = dict(A='T', C='G', G='C', T='A')
+        for pos, tag, snp in tagDict.get_snps():
+            try:
+                geneSNP = al[dna[pos - 1:pos]].keys()[0]
+            except IndexError:
+                pass
+            else:
+                if geneSNP.orientation < 0:
+                    geneSNP = -geneSNP
+                gene = geneSNP.id
+                ipos = geneSNP.start % 3
+                codonStart = geneSNP.start - ipos
+                codon = str(geneSNP.path.sequence[codonStart:codonStart + 3])
+                b = snp.alt # substitution letter
+                if geneSNP.sequence.orientation < 0: # must complement
+                    b = rc[b.upper()]
+                codonAlt = codon[:ipos] + b + codon[ipos + 1:]
+                snp.aaRef = sequtil.translate_orf(codon)
+                snp.aaAlt = sequtil.translate_orf(codonAlt)
+                if snp.aaRef != snp.aaAlt: # only count non-synonymous muts
+                    weight = 1
+                    self.setdefault(gene, []).append((tag,snp))
+                else:
+                    weight = 0
+            if snp.ref in 'GCgc':
+                self.nGC += weight
+            else:
+                self.nAT += weight
+
+    def get_scores(self):
+        s = str(self.dna).upper()
+        gcTotal = s.count('G') + s.count('C')
+        atTotal = len(s) - gcTotal
+        results = []
+        for k, v in self.items():
+            ann = self.annodb[k]
+            s = str(ann.sequence).upper()
+            gcLen = s.count('G') + s.count('C')
+            atLen = len(s) - gcLen
+            pois = stats.poisson(self.nGC * float(gcLen) / gcTotal +
+                                 self.nAT * float(atLen) / atTotal)
+            results.append((pois.sf(len(v) - 1), k))
+        results.sort()
+        return results
+            
+
 if __name__ == '__main__':
-    import sys
-    tagFiles = sys.argv[1:]
+    print 'reading gene annotations from', sys.argv[1]
+    annodb, al, dna = read_genome_annots(sys.argv[1])
+    tagFiles = sys.argv[2:]
+    print 'reading tag files:', tagFiles
     tagDict = read_tag_files(tagFiles)
+    gsd = GeneSNPDict(tagDict, annodb, al, dna)
+    print 'scoring genes...'
+    results = gsd.get_scores()
+    print 'top 20 hits:', results[:20]
+    
