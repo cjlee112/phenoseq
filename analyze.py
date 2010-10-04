@@ -240,7 +240,19 @@ class GeneSNPDict(dict):
             results.append((pois.sf(len(v) - 1), k))
         results.sort()
         return results
-            
+
+def generate_subsets(tagFiles, annodb, al, dna):
+    'generate results from all possible subsets of tagFiles'
+    d = {}
+    for i in range(1, pow(2, len(tagFiles))):
+        print 'subset', i
+        l = [tagFile for (j, tagFile) in enumerate(tagFiles)
+             if i & pow(2, j)]
+        tagDict = read_tag_files(l)
+        gsd = GeneSNPDict(tagDict, annodb, al, dna)
+        results = gsd.get_scores()
+        d[tuple([s.split('.')[0] for s in l])] = results
+    return d
 
 if __name__ == '__main__':
     print 'reading gene annotations from', sys.argv[1]
