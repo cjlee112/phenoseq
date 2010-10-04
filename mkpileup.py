@@ -17,14 +17,18 @@ def bam2pileup(bamfile, reffile):
                            filestem + '.bam'], stdout=pileupFile)
     pileupFile.close()
 
-def merge_bamfiles(bamfiles, tagfilter):
+def merge_bamfiles(bamfiles, tagfilter, nameFunc=None):
     d = {}
     for filename in bamfiles:
         tag = tagfilter(filename)
         d.setdefault(tag, []).append(filename)
     for tag, bamlist in d.items():
         print 'merging:', bamlist
-        subprocess.check_call(['samtools', 'merge', tag + '.bam'] 
+        if nameFunc is not None: # get customized name from user function
+            outFile = nameFunc(tag, bamlist)
+        else:
+            outFile = tag + '.bam'
+        subprocess.check_call(['samtools', 'merge', outFile] 
                               + bamlist)
 
 def find_snps(bamfiles, reffile):
