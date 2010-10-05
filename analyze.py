@@ -225,32 +225,48 @@ class GeneSNPDict(dict):
             else:
                 self.nAT += weight
 
-    def get_scores(self):
-        s = str(self.dna).upper()
-        gcTotal = s.count('G') + s.count('C')
-        atTotal = len(s) - gcTotal
+    def get_scores(self, gcTotal=None, atTotal=None, geneGCDict=None):
+        'will use pre-computed GC/AT count data if you provide it'
+        if gcTotal is None:
+            gcTotal, atTotal = calc_gc(str(self.dna))
         results = []
         for k, v in self.items():
-            ann = self.annodb[k]
-            s = str(ann.sequence).upper()
-            gcLen = s.count('G') + s.count('C')
-            atLen = len(s) - gcLen
+            if geneGCDict:
+                gcLen, atLen = geneGCDict[k]
+            else:
+                gcLen, atLen = calc_gene_gc(self.annodb, k)
             pois = stats.poisson(self.nGC * float(gcLen) / gcTotal +
                                  self.nAT * float(atLen) / atTotal)
             results.append((pois.sf(len(v) - 1), k))
         results.sort()
         return results
 
+def calc_gc(s):
+    'calc GC and AT counts in string s'
+    s = s.upper()
+    gcTotal = s.count('G') + s.count('C')
+    atTotal = len(s) - gcTotal
+    return gcTotal, atTotal
+
+def calc_gene_gc(annodb, geneID):
+    'get GC, AT counts for specified gene'
+    ann = annodb[geneID]
+    return calc_gc(str(ann.sequence))
+
 def generate_subsets(tagFiles, annodb, al, dna):
     'generate results from all possible subsets of tagFiles'
     d = {}
+    gcTotal, atTotal = calc_gc(str(dna))
+    geneGCDict = {}
+    for geneID in annodb:
+        geneGCDict[geneID] = calc_gene_gc(annodb, geneID)
     for i in range(1, pow(2, len(tagFiles))):
         print 'subset', i
         l = [tagFile for (j, tagFile) in enumerate(tagFiles)
              if i & pow(2, j)]
         tagDict = read_tag_files(l)
         gsd = GeneSNPDict(tagDict, annodb, al, dna)
-        results = gsd.get_scores()
+        results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
         d[tuple([s.split('.')[0] for s in l])] = results
     return d
 
