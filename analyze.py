@@ -152,8 +152,14 @@ class TagDict(dict):
         return l
 
 
-def read_tag_files(tagFiles, tagfunc=lambda s:s.split('.')[0],
-                      replicatefunc=lambda s:glob.glob('*_' + s + '.vcf'),
+def get_filestem(s):
+    return s.split('.')[0]
+
+def get_replicate_files(s):
+    return glob.glob('*_' + s + '.vcf')
+
+def read_tag_files(tagFiles, tagfunc=get_filestem,
+                      replicatefunc=get_replicate_files,
                       *args):
     'construct TagDict for all these tagFiles'
     d = {}
@@ -253,7 +259,7 @@ def calc_gene_gc(annodb, geneID):
     ann = annodb[geneID]
     return calc_gc(str(ann.sequence))
 
-def generate_subsets(tagFiles, annodb, al, dna):
+def generate_subsets(tagFiles, annodb, al, dna, *args):
     'generate results from all possible subsets of tagFiles'
     d = {}
     gcTotal, atTotal = calc_gc(str(dna))
@@ -264,7 +270,7 @@ def generate_subsets(tagFiles, annodb, al, dna):
         print 'subset', i
         l = [tagFile for (j, tagFile) in enumerate(tagFiles)
              if i & pow(2, j)]
-        tagDict = read_tag_files(l)
+        tagDict = read_tag_files(l, *args)
         gsd = GeneSNPDict(tagDict, annodb, al, dna)
         results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
         d[tuple([s.split('.')[0] for s in l])] = results
