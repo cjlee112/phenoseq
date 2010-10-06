@@ -169,6 +169,11 @@ def read_tag_files(tagFiles, tagfunc=get_filestem,
         d[tag] = (tagFile, repFiles) + args
     return TagDict(d)
 
+def read_vcf_singleton(vcfFile):
+    'load dataset consisting of a single vcf file'
+    d = dict(mytag=(vcfFile, (), 0))
+    return TagDict(d)
+
 
 def read_genome_annots(gbfile, iseq=0, featureType='CDS'):
     features = list(SeqIO.parse(gbfile, 'genbank'))[iseq].features
@@ -259,13 +264,20 @@ def calc_gene_gc(annodb, geneID):
     ann = annodb[geneID]
     return calc_gc(str(ann.sequence))
 
-def generate_subsets(tagFiles, annodb, al, dna, *args):
-    'generate results from all possible subsets of tagFiles'
-    d = {}
+
+def get_gc_totals(annodb, dna):
+    'get GC/AT counts for whole genome and for individual genes in annodb'
     gcTotal, atTotal = calc_gc(str(dna))
     geneGCDict = {}
     for geneID in annodb:
         geneGCDict[geneID] = calc_gene_gc(annodb, geneID)
+    return gcTotal, atTotal, geneGCDict
+
+
+def generate_subsets(tagFiles, annodb, al, dna, *args):
+    'generate results from all possible subsets of tagFiles'
+    d = {}
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
     for i in range(1, pow(2, len(tagFiles))):
         print 'subset', i
         l = [tagFile for (j, tagFile) in enumerate(tagFiles)
@@ -275,6 +287,26 @@ def generate_subsets(tagFiles, annodb, al, dna, *args):
         results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
         d[tuple([s.split('.')[0] for s in l])] = results
     return d
+
+
+def get_pool_tags(poolFile):
+    'extract tags from filenames of the form tag_*_tag_*...'
+    l = poolFile.split('_')
+    return tuple([l[i] for i in range(0, len(l), 2)])
+
+
+def process_pools(poolFiles, annodb, al, dna, tagFunc=get_pool_tags,
+                  *args):
+    'generate results for a list of pool files'
+    d = {}
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    for poolFile in poolFiles:
+        tagDict = read_vcf_singleton(poolFile)
+        gsd = GeneSNPDict(tagDict, annodb, al, dna)
+        results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
+        d[tagFunc(poolFile)] = results
+    return d
+
 
 if __name__ == '__main__':
     print 'reading gene annotations from', sys.argv[1]
