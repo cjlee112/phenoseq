@@ -274,7 +274,7 @@ def get_gc_totals(annodb, dna):
     return gcTotal, atTotal, geneGCDict
 
 
-def generate_subsets(tagFiles, annodb, al, dna, *args):
+def generate_subsets(tagFiles, annodb, al, dna, nbest=None, *args):
     'generate results from all possible subsets of tagFiles'
     d = {}
     gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
@@ -285,7 +285,7 @@ def generate_subsets(tagFiles, annodb, al, dna, *args):
         tagDict = read_tag_files(l, *args)
         gsd = GeneSNPDict(tagDict, annodb, al, dna)
         results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
-        d[tuple([s.split('.')[0] for s in l])] = results
+        d[tuple([s.split('.')[0] for s in l])] = results[:nbest]
     return d
 
 
@@ -296,7 +296,7 @@ def get_pool_tags(poolFile):
 
 
 def process_pools(poolFiles, annodb, al, dna, tagFunc=get_pool_tags,
-                  *args):
+                  nbest=None, *args):
     'generate results for a list of pool files'
     d = {}
     gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
@@ -304,7 +304,45 @@ def process_pools(poolFiles, annodb, al, dna, tagFunc=get_pool_tags,
         tagDict = read_vcf_singleton(poolFile)
         gsd = GeneSNPDict(tagDict, annodb, al, dna)
         results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
-        d[tagFunc(poolFile)] = results
+        d[tagFunc(poolFile)] = results[:nbest]
+    return d
+
+
+def enumerate_pool_subsets(poolFiles, n, tagFunc=get_pool_tags, d=None):
+    'recursively generate all disjoint pool combinations containing n pools'
+    if d is None:
+        d = set()
+    for i,poolFile in enumerate(poolFiles):
+        tags = get_pool_tags(poolFile)
+        if [1 for t in tags if t in d]: # check for overlap
+            continue # can't use this pool, due to overlap
+        if n == 1: # terminate the recursion
+            yield (poolFile,)
+        else: # recurse
+            d.update(tags)
+            for result in enumerate_pool_subsets(poolFiles[i + 1:], n - 1,
+                                                 tagFunc, d):
+                yield (poolFile,) + result
+            for tag in tags:
+                d.remove(tag)
+
+
+def generate_pool_subsets(poolFiles, n, annodb, al, dna,
+                          tagfunc=lambda s:s,
+                          replicatefunc=lambda s:(), minRep=0,
+                          nbest=None, *args):
+    'run phenoseq analysis on all disjoint pool combinations'
+    d = {}
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    for i in range(1, n + 1):
+        for pfiles in enumerate_pool_subsets(poolFiles, i):
+            print 'analyzing', pfiles
+            tagDict = read_tag_files(pfiles, tagfunc, replicatefunc,
+                                     minRep, *args)
+            gsd = GeneSNPDict(tagDict, annodb, al, dna)
+            results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
+            k = reduce(lambda x,y:x + y, [get_pool_tags(t) for t in pfiles])
+            d[k] = results[:nbest]
     return d
 
 
