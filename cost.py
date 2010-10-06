@@ -1,3 +1,5 @@
+import glob
+import subprocess
 from math import sqrt
 try:
     import numpy
@@ -87,4 +89,28 @@ def plot_cost(data, costPerStrain=3 * 1400 / 32. + 10 * 200 / 32., **kwargs):
                     [t[1] for t in data],
                     [t[2] for t in data], **kwargs)
 
+def merge_names(names):
+    tags = [s.split('.')[0].split('_')[-1] for s in names]
+    lanes = [s.split('_')[2] for s in names]
+    l = [(tags[i] + '_' + lanes[i]) for i in range(len(names))]
+    return '_'.join(l) + '.bam'
+
+def generate_tag_pairs(tags):
+    for i, tag1 in enumerate(tags):
+        for j in range(i + 1, len(tags)):
+            yield tag1, tags[j]
+
+def get_tag_lane_file(tag, lane):
+    return 'aligned_s_%d_%s.bam' % (lane, tag)
     
+def merge_libs(tags, lanes=range(1,4), bamFunc=get_tag_lane_file, 
+               outFunc=merge_names):
+    for i in lanes:
+        for j in lanes:
+            for tag1,tag2 in generate_tag_pairs(tags):
+                bam1 = bamFunc(tag1, i)
+                bam2 = bamFunc(tag2, j)
+                outFile = outFunc((bam1, bam2))
+                print 'merging', outFile
+                subprocess.check_call(('samtools', 'merge', outFile,
+                                       bam1, bam2))
