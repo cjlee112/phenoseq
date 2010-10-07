@@ -327,14 +327,14 @@ def enumerate_pool_subsets(poolFiles, n, tagFunc=get_pool_tags, d=None):
                 d.remove(tag)
 
 
-def generate_pool_subsets(poolFiles, n, annodb, al, dna,
+def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
                           tagfunc=lambda s:s,
                           replicatefunc=lambda s:(), minRep=0,
                           nbest=None, *args):
     'run phenoseq analysis on all disjoint pool combinations'
     d = {}
     gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
-    for i in range(1, n + 1):
+    for i in npools:
         for pfiles in enumerate_pool_subsets(poolFiles, i):
             print 'analyzing', pfiles
             tagDict = read_tag_files(pfiles, tagfunc, replicatefunc,
