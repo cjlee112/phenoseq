@@ -148,8 +148,8 @@ def expectation(d):
 
 class CutoffSuccess(object):
     def __init__(self, ngene, c=75, npool=4, epsilon=0.01,
-                 cutoffs=range(1,26), ntotal=4e+06):
-        self.pmf = stats.binom(c, (1. - 3. * epsilon) / npool)
+                 cutoffs=range(1,26), ntotal=4e+06, mutFac=1.):
+        self.pmf = stats.binom(c, (1. - mutFac * epsilon) / npool)
         self.pmf2 = stats.binom(c, epsilon)
         self.pFail = self.pmf.cdf(numpy.array(cutoffs) - 1) # cdf() offset by one
         self. lambdaError = (float(ntotal) / ngene) \
@@ -209,11 +209,11 @@ def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
 
 def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
                   ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98,
-                  nwait=4):
+                  nwait=4, mutFac=1.):
     'find optimal yield by scanning mutation call cutoff values'
     lam = float(nmut) / ngene
     genesize = ntotal / ngene
-    pmfMut = stats.binom(c, (1. - 3. * epsilon) / npool)
+    pmfMut = stats.binom(c, (1. - mutFac * epsilon) / npool)
     pmfErr = stats.binom(c, epsilon)
     for i in range(c):
         if pmfErr.sf(i) * ntotal < 2 * nmut: # noise starting to fall below signal
