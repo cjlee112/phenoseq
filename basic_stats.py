@@ -31,11 +31,9 @@ class HitCountList(object):
 
 class PoissonRange(object):
     'represents confidence interval of poisson dist, above residual'
-    def __init__(self, nstrain, lambdaTrue, lambdaError=0., pFail=0.,
-                 residual=0.001):
-        lam = lambdaTrue * (1. - pFail) + lambdaError
-        self.poisson = pois = stats.poisson(nstrain * lam)
-        nmax = nmin = 0
+    def __init__(self, lam, residual=0.001, nmin=0):
+        self.poisson = pois = stats.poisson(lam)
+        nmax = nmin
         while pois.sf(nmax) >= residual: # find max plausible hits
             if pois.cdf(nmax) < residual:
                 nmin = nmax
@@ -44,19 +42,43 @@ class PoissonRange(object):
         self.nmax = nmax
         self.pmf = pois.pmf(numpy.arange(nmin, nmax))
 
+    def renormalize(self):
+        'renormalize self.pmf to sum to 100%'
+        self.pmf /= self.pmf.sum()
 
-def sample_maxhit_gen(n, nstrain, ntarget, ngene, poissonRange, pFail=0.):
+    def sample_totals(self, nsample, n):
+        'get n draws of total counts in sample of size nsample'
+        counts = numpy.random.multinomial(nsample, self.pmf, size=n)
+        totals = counts * numpy.arange(self.nmin, self.nmax)
+        return totals.sum(axis=1)
+
+
+def sample_maxhit_gen(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
+                      lambdaError=0., pFail=0., residual=0.001,
+                      targetProbs=None):
     '''generate lists of hit counts in real targets vs. nontargets in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.
     decoyCounts vectors are offset by poissonRange.nmin'''
-    probs = ((1. - pFail) / ntarget,) * ntarget + (pFail,)
-    targetHits = numpy.random.multinomial(nstrain, probs, size=n)
-    targetNoise = poissonRange.poisson.rvs((n, ntarget))
+    prTarget = PoissonRange(ntarget * lambdaTrue, residual / nstrain, 1)
+    prTarget.renormalize() # condition on at least one hit in target region
+    targetN = prTarget.sample_totals(nstrain, n)
+    if targetProbs: # user-supplied target size vector
+        targetProbs = [(p * (1. - pFail)) for p in targetProbs] + [pFail]
+    else: # uniform target sizes
+        targetProbs = ((1. - pFail) / ntarget,) * ntarget + (pFail,)
+    targetProbs = numpy.array(targetProbs)
+    if lambdaError:
+        poisErr = stats.poisson(lambdaError)
+        targetNoise = poisErr.rvs((n, ntarget))
     decoyCounts = numpy.random.multinomial(ngene - ntarget,
-                                           poissonRange.pmf, size=n)
+                                           prDecoy.pmf, size=n)
     for i in xrange(n): # analyze replicates
-        hits = targetHits[i][:ntarget] + targetNoise[i]
+        targetHits = numpy.random.multinomial(targetN[i], targetProbs)
+        if lambdaError:
+            hits = targetHits[:ntarget] + targetNoise[i]
+        else:
+            hits = targetHits[:ntarget]
         nmax = hits.max()
         if nmax < ntarget: # list all counts from 0 to nmax
             targetCounts = [(hits == j).sum() for j in xrange(nmax + 1)]
@@ -65,8 +87,8 @@ def sample_maxhit_gen(n, nstrain, ntarget, ngene, poissonRange, pFail=0.):
         yield targetCounts, decoyCounts[i]
 
 
-def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
-                  lambdaError=0., pFail=0., residual=0.001):
+def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue, lambdaError=0.,
+                  pFail=0., residual=0.001, targetProbs=None):
     '''Compute fraction of best hits that are real targets in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.
@@ -81,11 +103,12 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
     errors (false mutation calls) per gene.
     pFail: probability that true mutation detection will fail'''
     ngood = nok = 0
-    poissonRange = PoissonRange(nstrain, lambdaTrue, lambdaError, pFail,
-                                residual / ngene)
+    lam = lambdaTrue * (1. - pFail) + lambdaError
+    prDecoy = PoissonRange(nstrain * lam, residual / ngene)
     for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget, ngene,
-                                                  poissonRange, pFail):
-        maxreal = len(realhits) - 1 - poissonRange.nmin
+                        prDecoy, lambdaTrue, lambdaError, pFail, residual,
+                        targetProbs):
+        maxreal = len(realhits) - 1 - prDecoy.nmin
         if nontargets[max(maxreal + 1, 0):].sum() == 0: # no better nontarget
             if maxreal < len(nontargets) and nontargets[maxreal]:
                 nok += 1 # real target tied with best non-target
@@ -95,20 +118,22 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
 
 
 def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
-                       lambdaError=0., pFail=0., fdr=0.67, residual=0.001):
+                       lambdaError=0., pFail=0., fdr=0.67, residual=0.001,
+                       targetProbs=None):
     '''Compute distribution of real targets detected above fdr, in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.'''
     d = {}
     p = 1. / n
-    poissonRange = PoissonRange(nstrain, lambdaTrue, lambdaError, pFail,
-                                residual / ngene)
+    lam = lambdaTrue * (1. - pFail) + lambdaError
+    prDecoy = PoissonRange(nstrain * lam, residual / ngene)
     for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget, ngene,
-                                                  poissonRange, pFail):
+                        prDecoy, lambdaTrue, lambdaError, pFail, residual,
+                        targetProbs):
         nhit = lastReal = 0
         for i in range(len(realhits) - 1, 0, -1):
             nhit += realhits[i]
-            nbad = nontargets[max(i - poissonRange.nmin, 0):].sum()
+            nbad = nontargets[max(i - prDecoy.nmin, 0):].sum()
             if float(nbad) / (nbad + nhit) > fdr:
                 break
             lastReal = nhit
@@ -124,7 +149,7 @@ def expectation(d):
 class CutoffSuccess(object):
     def __init__(self, ngene, c=75, npool=4, epsilon=0.01,
                  cutoffs=range(1,26), ntotal=4e+06):
-        self.pmf = stats.binom(c, (1. - epsilon) / npool)
+        self.pmf = stats.binom(c, (1. - 3. * epsilon) / npool)
         self.pmf2 = stats.binom(c, epsilon)
         self.pFail = self.pmf.cdf(numpy.array(cutoffs) - 1) # cdf() offset by one
         self. lambdaError = (float(ntotal) / ngene) \
@@ -188,7 +213,7 @@ def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
     'find optimal yield by scanning mutation call cutoff values'
     lam = float(nmut) / ngene
     genesize = ntotal / ngene
-    pmfMut = stats.binom(c, (1. - epsilon) / npool)
+    pmfMut = stats.binom(c, (1. - 3. * epsilon) / npool)
     pmfErr = stats.binom(c, epsilon)
     for i in range(c):
         if pmfErr.sf(i) * ntotal < 2 * nmut: # noise starting to fall below signal
