@@ -183,7 +183,8 @@ def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
     return r
 
 def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
-                  ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98):
+                  ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98,
+                  nwait=4):
     'find optimal yield by scanning mutation call cutoff values'
     lam = float(nmut) / ngene
     genesize = ntotal / ngene
@@ -192,7 +193,7 @@ def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
     for i in range(c):
         if pmfErr.sf(i) * ntotal < 2 * nmut: # noise starting to fall below signal
             break
-    yieldMax = None
+    yieldMax = cutoff = None
     while yieldMax is None or yieldLast >= yieldMax * threshold:
         d = sample_maxhit_rank(n, nstrain, ntarget, ngene, lam,
                                pmfErr.sf(i) * genesize, pmfMut.cdf(i))
@@ -200,6 +201,8 @@ def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
         if yieldMax is None or yieldLast > yieldMax:
             yieldMax = yieldLast
             cutoff = i + 1
+        elif cutoff is not None and i - cutoff > nwait:
+            break
         i += 1
     return yieldMax, cutoff
 
