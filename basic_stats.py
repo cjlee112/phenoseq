@@ -207,14 +207,18 @@ def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
     return yieldMax, cutoff
 
 
-def optimal_npool(nstrain, minFrac=0.98, npool=0, *args, **kwargs):
+def optimal_npool(nstrain, minFrac=0.98, l=1, r=None, *args, **kwargs):
     'find maximum npool whose yield >= minFrac * yieldMax'
-    yieldMax = y = None
-    while yieldMax is None or y >= yieldMax * minFrac:
-        yieldLast = y
-        npool += 1
-        y, i = optimal_yield(nstrain, npool=npool, *args, **kwargs)
-        if yieldMax is None or y > yieldMax:
-            yieldMax = y
-            best = npool
-    return yieldLast, npool - 1
+    yieldMax, i = optimal_yield(nstrain, l, *args, **kwargs) # baseline
+    while r is None or r - l > 1:
+        if r is None: # expand upper bound
+            m = 2 * l
+        else: # midpoint of interval
+            m = (l + r) / 2
+        y, i = optimal_yield(nstrain, npool=m, *args, **kwargs)
+        if y >= yieldMax * minFrac: # still acceptable
+            l = m
+            yieldLast = y
+        else: # beyond acceptable range
+            r = m
+    return yieldLast, l
