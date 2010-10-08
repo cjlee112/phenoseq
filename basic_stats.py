@@ -182,7 +182,7 @@ def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
             l = m
     return r
 
-def optimal_yield(nstrain, c=75, npool=4, epsilon=0.01, n=1000, nmut=50,
+def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
                   ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98):
     'find optimal yield by scanning mutation call cutoff values'
     lam = float(nmut) / ngene
@@ -202,3 +202,16 @@ def optimal_yield(nstrain, c=75, npool=4, epsilon=0.01, n=1000, nmut=50,
             cutoff = i + 1
         i += 1
     return yieldMax, cutoff
+
+
+def optimal_npool(nstrain, minFrac=0.98, npool=0, *args, **kwargs):
+    'find maximum npool whose yield >= minFrac * yieldMax'
+    yieldMax = y = None
+    while yieldMax is None or y >= yieldMax * minFrac:
+        yieldLast = y
+        npool += 1
+        y, i = optimal_yield(nstrain, npool=npool, *args, **kwargs)
+        if yieldMax is None or y > yieldMax:
+            yieldMax = y
+            best = npool
+    return yieldLast, npool - 1
