@@ -164,3 +164,41 @@ def calc_pooling_success(n, nstrain, ntarget, ngene, c=75,
         l = c.calc_success(n, nstrain, ntarget, ntrue)
         results.append(max([t[0] for t in l]))
     return results
+
+def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
+    'find number of strains that achieves desired yield'
+    lam = float(nmut) / ngene
+    l = ntarget
+    while r is None or r - l > 1:
+        if r is None: # expand upper bound
+            m = 2 * l
+        else: # midpoint of interval
+            m = (l + r) / 2
+        d = sample_maxhit_rank(n, m, ntarget, ngene, lam)
+        v = expectation(d) # compute average yield
+        if v > goal * ntarget: # exceeded goal
+            r = m
+        else: # below goal
+            l = m
+    return r
+
+def optimal_yield(nstrain, c=75, npool=4, epsilon=0.01, n=1000, nmut=50,
+                  ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98):
+    'find optimal yield by scanning mutation call cutoff values'
+    lam = float(nmut) / ngene
+    genesize = ntotal / ngene
+    pmfMut = stats.binom(c, (1. - epsilon) / npool)
+    pmfErr = stats.binom(c, epsilon)
+    for i in range(c):
+        if pmfErr.sf(i) * ntotal < 2 * nmut: # noise starting to fall below signal
+            break
+    yieldMax = None
+    while yieldMax is None or yieldLast >= yieldMax * threshold:
+        d = sample_maxhit_rank(n, nstrain, ntarget, ngene, lam,
+                               pmfErr.sf(i) * genesize, pmfMut.cdf(i))
+        yieldLast = expectation(d)
+        if yieldMax is None or yieldLast > yieldMax:
+            yieldMax = yieldLast
+            cutoff = i + 1
+        i += 1
+    return yieldMax, cutoff
