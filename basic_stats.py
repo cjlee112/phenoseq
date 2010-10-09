@@ -148,7 +148,7 @@ def expectation(d):
 
 class CutoffSuccess(object):
     def __init__(self, ngene, c=75, npool=4, epsilon=0.01,
-                 cutoffs=range(1,26), ntotal=4e+06, mutFac=1.):
+                 cutoffs=range(1,26), ntotal=4e+06, mutFac=3.):
         self.pmf = stats.binom(c, (1. - mutFac * epsilon) / npool)
         self.pmf2 = stats.binom(c, epsilon)
         self.pFail = self.pmf.cdf(numpy.array(cutoffs) - 1) # cdf() offset by one
@@ -209,7 +209,7 @@ def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
 
 def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
                   ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98,
-                  nwait=4, mutFac=1.):
+                  nwait=4, mutFac=3., **kwargs):
     'find optimal yield by scanning mutation call cutoff values'
     lam = float(nmut) / ngene
     genesize = ntotal / ngene
@@ -221,7 +221,8 @@ def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
     yieldMax = cutoff = None
     while yieldMax is None or yieldLast >= yieldMax * threshold:
         d = sample_maxhit_rank(n, nstrain, ntarget, ngene, lam,
-                               pmfErr.sf(i) * genesize, pmfMut.cdf(i))
+                               pmfErr.sf(i) * genesize, pmfMut.cdf(i),
+                               **kwargs)
         yieldLast = expectation(d)
         if yieldMax is None or yieldLast > yieldMax:
             yieldMax = yieldLast
