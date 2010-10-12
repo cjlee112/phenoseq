@@ -4,68 +4,92 @@ import numpy
 from scipy import stats
 from math import exp, log
 
-def sample_genes(ngene=4200, nmut=100):
-    """Generate counts of genes with 1, 2 or more mutations,
-    treating each gene as equally likely."""
-    d = {}
-    for i in range(nmut):
-        k = random.randint(0, ngene)
-        d[k] = d.get(k, 0) + 1
-    c = {}
-    for i in d.values():
-        c[i] = c.get(i, 0) + 1
-    return c
+class HitCountList(object):
+    'efficient container for sparse lists, i.e. where many entries are 0'
+    def __init__(self, counts):
+        self.max = counts.max()
+        n = 0
+        total = len(counts) # total number of genes
+        d = {}
+        for c in counts:
+            if c not in d:
+                i = (counts == c).sum()
+                d[c] = i # save this hit count
+                n += i
+                if n >= total: # counted all genes
+                    break
+        self.d = d
 
-def waiting_times(n, mu):
-    'generates infinite sequence of exponential waiting times'
-    pdf = stats.expon(0, mu)
-    i = 0
-    data = pdf.rvs(n)
-    while True:
+    def __len__(self):
+        return self.max + 1
+
+    def __getitem__(self, k):
         try:
-            yield data[i]
-        except IndexError:
-            i = 0
-            data = pdf.rvs(n)
-            yield data[i]
-        i += 1
+            return self.d[k]
+        except KeyError:
+            return 0
 
-def expon_screen(nstrain, ntarget, start, waitTime, pFail):
-    '''screen based on exponential waiting times; good for low densities,
-    very slow for high densities'''
-    realhits = {}
-    for j in xrange(nstrain):
-        x = start.next()
-        while x < ntarget: # record target mutations in this strain
-            if random.random() >= pFail: # mutation detected
-                k = int(x)
-                realhits[k] = realhits.get(k, 0) + 1
-            x += waitTime.next()
-    if len(realhits) > 0:
-        return numpy.array(realhits.values())
-    else: # no hits at all
-        return numpy.array((0,))
+class PoissonRange(object):
+    'represents confidence interval of poisson dist, above residual'
+    def __init__(self, lam, residual=0.001, nmin=0):
+        self.poisson = pois = stats.poisson(lam)
+        nmax = nmin
+        while pois.sf(nmax) >= residual: # find max plausible hits
+            if pois.cdf(nmax) < residual:
+                nmin = nmax
+            nmax += 1
+        self.nmin = nmin # sample values will fall within this range
+        self.nmax = nmax
+        self.pmf = pois.pmf(numpy.arange(nmin, nmax))
+
+    def renormalize(self):
+        'renormalize self.pmf to sum to 100%'
+        self.pmf /= self.pmf.sum()
+
+    def sample_totals(self, nsample, n):
+        'get n draws of total counts in sample of size nsample'
+        counts = numpy.random.multinomial(nsample, self.pmf, size=n)
+        totals = counts * numpy.arange(self.nmin, self.nmax)
+        return totals.sum(axis=1)
 
 
-def poisson_screen(nstrain, ntarget, pois):
-    'screen based on poisson; good for high densities'
-    realhits = numpy.core.zeros(ntarget)
-    for j in xrange(nstrain):
-        while True:
-            hits = pois.rvs(ntarget)
-            if hits.max() > 0:
-                break
-        realhits += hits
-    return realhits
-
-def fast_screen(ntarget, pois):
-    'assumes every strain will pass screen, so model all strains as a group'
-    return pois.rvs(ntarget)
-
-def sample_maxhit_gen(n, nstrain, ntarget, ngene, lambdaTrue,
-                      lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1,
-                      pFast=0.1):
+def sample_maxhit_gen(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
+                      lambdaError=0., pFail=0., residual=0.001,
+                      targetProbs=None):
     '''generate lists of hit counts in real targets vs. nontargets in
+    multihit screen, using probability of hitting target
+    gene(s) conditioned on requiring at least one such hit.
+    decoyCounts vectors are offset by poissonRange.nmin'''
+    prTarget = PoissonRange(ntarget * lambdaTrue, residual / nstrain, 1)
+    prTarget.renormalize() # condition on at least one hit in target region
+    targetN = prTarget.sample_totals(nstrain, n)
+    if targetProbs: # user-supplied target size vector
+        targetProbs = [(p * (1. - pFail)) for p in targetProbs] + [pFail]
+    else: # uniform target sizes
+        targetProbs = ((1. - pFail) / ntarget,) * ntarget + (pFail,)
+    targetProbs = numpy.array(targetProbs)
+    if lambdaError:
+        poisErr = stats.poisson(lambdaError)
+        targetNoise = poisErr.rvs((n, ntarget))
+    decoyCounts = numpy.random.multinomial(ngene - ntarget,
+                                           prDecoy.pmf, size=n)
+    for i in xrange(n): # analyze replicates
+        targetHits = numpy.random.multinomial(targetN[i], targetProbs)
+        if lambdaError:
+            hits = targetHits[:ntarget] + targetNoise[i]
+        else:
+            hits = targetHits[:ntarget]
+        nmax = hits.max()
+        if nmax < ntarget: # list all counts from 0 to nmax
+            targetCounts = [(hits == j).sum() for j in xrange(nmax + 1)]
+        else: # use efficient container for sparse list
+            targetCounts = HitCountList(hits)
+        yield targetCounts, decoyCounts[i]
+
+
+def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue, lambdaError=0.,
+                  pFail=0., residual=0.001, targetProbs=None):
+    '''Compute fraction of best hits that are real targets in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.
     n: number of replicates
@@ -78,85 +102,41 @@ def sample_maxhit_gen(n, nstrain, ntarget, ngene, lambdaTrue,
     lambdaError: Poisson parameter representing mean number of sequencing
     errors (false mutation calls) per gene.
     pFail: probability that true mutation detection will fail'''
-    lam = lambdaTrue * (1. - pFail) + lambdaError
-    pois = stats.poisson(nstrain * lam)
-    p = stats.poisson(ntarget * lam).pmf(0)
-    usePoisson = useFast = False
-    if p * nstrain < pFast: # use fast screen approximation
-        useFast = True
-    elif p < pPoisson: # use Poisson screen
-        usePoisson = True
-        poisTarget = stats.poisson(lam)
-    else: # use waiting times
-        lam = lambdaTrue + lambdaError
-        mu = 1. / lam # mean waiting time parameter
-        f = 1. - exp(-ntarget / mu)
-        r = numpy.random.random_sample(n * nstrain) # random x from 0 - 1
-        start = (-mu) * numpy.log(1. - f * r) # location of 1st target mutation
-        startIter = iter(start)
-        waitTime = waiting_times(nwait, mu)
-    for i in xrange(n): # analyze replicates
-        if useFast:
-            realhits = fast_screen(nstrain, pois)
-        elif usePoisson:
-            realhits = poisson_screen(nstrain, ntarget, poisTarget)
-        else:
-            realhits = expon_screen(nstrain, ntarget, startIter, waitTime,
-                                    pFail)
-        nontargets = pois.rvs(ngene - ntarget) # #hits per gene
-        yield realhits, nontargets
-
-
-def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue,
-                  lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1,
-                  pFast=0.1):
-    '''Compute fraction of best hits that are real targets in
-    multihit screen, using probability of hitting target
-    gene(s) conditioned on requiring at least one such hit.'''
     ngood = nok = 0
-    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget,
-                                                  ngene, lambdaTrue,
-                                                  lambdaError, pFail,
-                                                  nwait, pPoisson, pFast):
-        maxreal = realhits.max()
-        maxbad = nontargets.max()
-        if maxreal > maxbad: # real target hit more than any non-target
-            ngood += 1
-        elif maxreal == maxbad: # real target tied with best non-target
-            nok += 1
+    lam = lambdaTrue * (1. - pFail) + lambdaError
+    prDecoy = PoissonRange(nstrain * lam, residual / ngene)
+    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget, ngene,
+                        prDecoy, lambdaTrue, lambdaError, pFail, residual,
+                        targetProbs):
+        maxreal = len(realhits) - 1 - prDecoy.nmin
+        if nontargets[max(maxreal + 1, 0):].sum() == 0: # no better nontarget
+            if maxreal < len(nontargets) and nontargets[maxreal]:
+                nok += 1 # real target tied with best non-target
+            else: # real target hit more than any non-target
+                ngood += 1
     return float(ngood) / n, float(ngood + nok) / n
 
 
 def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
-                       lambdaError=0., pFail=0., nwait=1000, pPoisson=0.1,
-                       pFast=0.1, rankCut=0.67):
-    '''Compute distribution of real targets detected above rankCut rank, in
+                       lambdaError=0., pFail=0., fdr=0.67, residual=0.001,
+                       targetProbs=None):
+    '''Compute distribution of real targets detected above fdr, in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.'''
     d = {}
     p = 1. / n
-    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget,
-                                                  ngene, lambdaTrue,
-                                                  lambdaError, pFail,
-                                                  nwait, pPoisson, pFast):
-        realhits.sort() # sort top hits to end of array
-        nontargets.sort()
-        ireal = -1
-        ibad = lastReal = 0
-        realend = -len(realhits)
-        end = -(ngene - ntarget)
-        while ireal >= realend:
-            nhits = realhits[ireal]
-            while ireal - 1 >= realend and \
-                  realhits[ireal - 1] == nhits: # count targets w/ nhits
-                ireal -= 1
-            while ibad - 1 >= end and nontargets[ibad - 1] >= nhits:
-                ibad -= 1 # count nontargets with >= nhits
-            if float(ibad) / (ibad + ireal) <= rankCut: # still acceptable
-                lastReal = -ireal # save as latest count of real hits
-            else: # over threshold, so exit
+    lam = lambdaTrue * (1. - pFail) + lambdaError
+    prDecoy = PoissonRange(nstrain * lam, residual / ngene)
+    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget, ngene,
+                        prDecoy, lambdaTrue, lambdaError, pFail, residual,
+                        targetProbs):
+        nhit = lastReal = 0
+        for i in range(len(realhits) - 1, 0, -1):
+            nhit += realhits[i]
+            nbad = nontargets[max(i - prDecoy.nmin, 0):].sum()
+            if float(nbad) / (nbad + nhit) > fdr:
                 break
-            ireal -= 1 
+            lastReal = nhit
         d[lastReal] = d.get(lastReal, 0.) + p # update probability dist'n
     return d
 
@@ -168,8 +148,8 @@ def expectation(d):
 
 class CutoffSuccess(object):
     def __init__(self, ngene, c=75, npool=4, epsilon=0.01,
-                 cutoffs=range(1,26), ntotal=4e+06):
-        self.pmf = stats.binom(c, (1. - epsilon) / npool)
+                 cutoffs=range(1,26), ntotal=4e+06, mutFac=3.):
+        self.pmf = stats.binom(c, (1. - mutFac * epsilon) / npool)
         self.pmf2 = stats.binom(c, epsilon)
         self.pFail = self.pmf.cdf(numpy.array(cutoffs) - 1) # cdf() offset by one
         self. lambdaError = (float(ntotal) / ngene) \
@@ -186,7 +166,7 @@ class CutoffSuccess(object):
                                    self.lambdaError[i], self.pFail[i]))
         return l
 
-    def calc_ranks(self, n, nstrain, ntarget, ntrue=50, rankCut=0.67):
+    def calc_ranks(self, n, nstrain, ntarget, ntrue=50, fdr=0.67):
         '''compute expected number of real hit(s) based on rankCut, as a
         function of cutoff threshold'''
         l = []
@@ -194,7 +174,7 @@ class CutoffSuccess(object):
             d = sample_maxhit_rank(n, nstrain, ntarget, self.ngene,
                                    float(ntrue) / self.ngene,
                                    self.lambdaError[i], self.pFail[i],
-                                   rankCut=rankCut)
+                                   fdr=fdr)
             l.append(expectation(d))
         return l
 
@@ -209,3 +189,62 @@ def calc_pooling_success(n, nstrain, ntarget, ngene, c=75,
         l = c.calc_success(n, nstrain, ntarget, ntrue)
         results.append(max([t[0] for t in l]))
     return results
+
+def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
+    'find number of strains that achieves desired yield'
+    lam = float(nmut) / ngene
+    l = ntarget
+    while r is None or r - l > 1:
+        if r is None: # expand upper bound
+            m = 2 * l
+        else: # midpoint of interval
+            m = (l + r) / 2
+        d = sample_maxhit_rank(n, m, ntarget, ngene, lam)
+        v = expectation(d) # compute average yield
+        if v > goal * ntarget: # exceeded goal
+            r = m
+        else: # below goal
+            l = m
+    return r
+
+def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
+                  ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98,
+                  nwait=4, mutFac=3., **kwargs):
+    'find optimal yield by scanning mutation call cutoff values'
+    lam = float(nmut) / ngene
+    genesize = ntotal / ngene
+    pmfMut = stats.binom(c, (1. - mutFac * epsilon) / npool)
+    pmfErr = stats.binom(c, epsilon)
+    for i in range(c):
+        if pmfErr.sf(i) * ntotal < 2 * nmut: # noise starting to fall below signal
+            break
+    yieldMax = cutoff = None
+    while yieldMax is None or yieldLast >= yieldMax * threshold:
+        d = sample_maxhit_rank(n, nstrain, ntarget, ngene, lam,
+                               pmfErr.sf(i) * genesize, pmfMut.cdf(i),
+                               **kwargs)
+        yieldLast = expectation(d)
+        if yieldMax is None or yieldLast > yieldMax:
+            yieldMax = yieldLast
+            cutoff = i + 1
+        elif cutoff is not None and i - cutoff > nwait:
+            break
+        i += 1
+    return yieldMax, cutoff
+
+
+def optimal_npool(nstrain, minFrac=0.98, l=1, r=None, *args, **kwargs):
+    'find maximum npool whose yield >= minFrac * yieldMax'
+    yieldMax, i = optimal_yield(nstrain, l, *args, **kwargs) # baseline
+    while r is None or r - l > 1:
+        if r is None: # expand upper bound
+            m = 2 * l
+        else: # midpoint of interval
+            m = (l + r) / 2
+        y, i = optimal_yield(nstrain, npool=m, *args, **kwargs)
+        if y >= yieldMax * minFrac: # still acceptable
+            l = m
+            yieldLast = y
+        else: # beyond acceptable range
+            r = m
+    return yieldLast, l
