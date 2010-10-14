@@ -34,13 +34,17 @@ class PoissonRange(object):
     def __init__(self, lam, residual=0.001, nmin=0):
         self.poisson = pois = stats.poisson(lam)
         nmax = nmin
-        while pois.sf(nmax) >= residual: # find max plausible hits
-            if pois.cdf(nmax) < residual:
+        if nmin > 0:
+            pTotal = pois.sf(nmin - 1) # sum prob for [nmin,infty)
+        else:
+            pTotal = 1.
+        while pois.sf(nmax) / pTotal >= residual: # find max plausible hits
+            if (pois.cdf(nmax) - 1. + pTotal) / pTotal < residual:
                 nmin = nmax
             nmax += 1
         self.nmin = nmin # sample values will fall within this range
-        self.nmax = nmax
-        self.pmf = pois.pmf(numpy.arange(nmin, nmax))
+        self.nmax = nmax + 1
+        self.pmf = pois.pmf(numpy.arange(nmin, nmax + 1))
 
     def renormalize(self):
         'renormalize self.pmf to sum to 100%'
