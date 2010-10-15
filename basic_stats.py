@@ -31,7 +31,7 @@ class HitCountList(object):
 
 class PoissonRange(object):
     'represents confidence interval of poisson dist, above residual'
-    def __init__(self, lam, residual=0.001, nmin=0):
+    def __init__(self, lam, residual=1e-06, nmin=0):
         self.poisson = pois = stats.poisson(lam)
         nmax = nmin
         if nmin > 0:
@@ -57,9 +57,35 @@ class PoissonRange(object):
         return totals.sum(axis=1)
 
 
-def sample_maxhit_gen(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
-                      lambdaError=0., pFail=0., residual=0.001,
-                      targetProbs=None):
+def gen_hits_base(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
+                  lambdaError=0., pFail=0., residual=0.001,
+                  targetProbs=None):
+    'slow test version of generate_hits()'
+    assert prDecoy.nmin == 0
+    i = n
+    targetPois = stats.poisson(lambdaTrue)
+    decoyPois = stats.poisson(lambdaTrue * nstrain)
+    for j in xrange(n):
+        targetCounts = numpy.zeros(ntarget)
+        for k in xrange(nstrain):
+            while True:
+                i += 1
+                if i >= n:
+                    targetHits = targetPois.rvs((n, ntarget))
+                    i = 0
+                if targetHits[i].max() > 0: # select strain that hits target
+                    break
+            targetCounts += targetHits[i]
+        decoyCounts = decoyPois.rvs(ngene - ntarget)
+        kmax = max(targetCounts.max(), decoyCounts.max())
+        targetRes = [((targetCounts == k).sum()) for k in range(kmax + 1)]
+        decoyRes = [((decoyCounts == k).sum()) for k in range(kmax + 1)]
+        yield numpy.array(targetRes), numpy.array(decoyRes)
+
+
+def generate_hits(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
+                  lambdaError=0., pFail=0., residual=1e-06,
+                  targetProbs=None):
     '''generate lists of hit counts in real targets vs. nontargets in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.
@@ -92,7 +118,8 @@ def sample_maxhit_gen(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
 
 
 def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue, lambdaError=0.,
-                  pFail=0., residual=0.001, targetProbs=None):
+                  pFail=0., residual=1e-06, targetProbs=None,
+                  genFunc=generate_hits):
     '''Compute fraction of best hits that are real targets in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.
@@ -109,7 +136,7 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue, lambdaError=0.,
     ngood = nok = 0
     lam = lambdaTrue * (1. - pFail) + lambdaError
     prDecoy = PoissonRange(nstrain * lam, residual / ngene)
-    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget, ngene,
+    for realhits, nontargets in genFunc(n, nstrain, ntarget, ngene,
                         prDecoy, lambdaTrue, lambdaError, pFail, residual,
                         targetProbs):
         maxreal = len(realhits) - 1 - prDecoy.nmin
@@ -122,8 +149,8 @@ def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue, lambdaError=0.,
 
 
 def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
-                       lambdaError=0., pFail=0., fdr=0.67, residual=0.001,
-                       targetProbs=None):
+                       lambdaError=0., pFail=0., fdr=0.67, residual=1e-06,
+                       targetProbs=None, genFunc=generate_hits):
     '''Compute distribution of real targets detected above fdr, in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.'''
@@ -131,7 +158,7 @@ def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
     p = 1. / n
     lam = lambdaTrue * (1. - pFail) + lambdaError
     prDecoy = PoissonRange(nstrain * lam, residual / ngene)
-    for realhits, nontargets in sample_maxhit_gen(n, nstrain, ntarget, ngene,
+    for realhits, nontargets in genFunc(n, nstrain, ntarget, ngene,
                         prDecoy, lambdaTrue, lambdaError, pFail, residual,
                         targetProbs):
         nhit = lastReal = 0
