@@ -31,7 +31,8 @@ class HitCountList(object):
 
 class PoissonRange(object):
     'represents confidence interval of poisson dist, above residual'
-    def __init__(self, lam, residual=1e-06, nmin=0):
+    def __init__(self, lam, residual=1e-06, nmin=0, ngene=1, calcSF=False):
+        self.ngene = ngene
         self.poisson = pois = stats.poisson(lam)
         nmax = nmin
         if nmin > 0:
@@ -45,6 +46,8 @@ class PoissonRange(object):
         self.nmin = nmin # sample values will fall within this range
         self.nmax = nmax + 1
         self.pmf = pois.pmf(numpy.arange(nmin, nmax + 1))
+        if calcSF: # save precomputed survival probabilities
+            self.sf = pois.sf(numpy.arange(nmin - 1, nmax))
 
     def renormalize(self):
         'renormalize self.pmf to sum to 100%'
@@ -99,7 +102,7 @@ def generate_hits(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
         targetProbs = ((1. - pFail) / ntarget,) * ntarget + (pFail,)
     targetProbs = numpy.array(targetProbs)
     if lambdaError:
-        poisErr = stats.poisson(lambdaError)
+        poisErr = stats.poisson(nstrain * lambdaError)
         targetNoise = poisErr.rvs((n, ntarget))
     decoyCounts = numpy.random.multinomial(ngene - ntarget,
                                            prDecoy.pmf, size=n)
@@ -115,6 +118,85 @@ def generate_hits(n, nstrain, ntarget, ngene, prDecoy, lambdaTrue,
         else: # use efficient container for sparse list
             targetCounts = HitCountList(hits)
         yield targetCounts, decoyCounts[i]
+
+
+def generate_hits_varsize(n, nstrain, ntarget, targetSizes, decoyBins,
+                          lambdaTrue, lambdaError=0., pFail=0.,
+                          residual=1e-06):
+    '''generate lists of hit counts in real targets vs. nontargets in
+    multihit screen, using probability of hitting target
+    gene(s) conditioned on requiring at least one such hit.
+    decoyCounts vectors are offset by poissonRange.nmin'''
+    lam = lambdaTrue * (1. - pFail) + lambdaError
+    total = sum(targetSizes)
+    targetScores = [stats.poisson(s * nstrain * lam).
+                    sf(numpy.arange(-1, int(nstrain * max(1, 2 * s * lambdaTrue))))
+                    for s in targetSizes]
+    prTarget = PoissonRange(total * lambdaTrue, residual / nstrain, 1)
+    prTarget.renormalize() # condition on at least one hit in target region
+    targetN = prTarget.sample_totals(nstrain, n)
+    targetProbs = [(s / total * (1. - pFail)) for s in targetSizes] \
+                  + [pFail]
+    targetProbs = numpy.array(targetProbs)
+    if lambdaError:
+        poisErrs = [stats.poisson(s * nstrain * lambdaError)
+                    for s in targetSizes]
+        poisCounts = [pois.rvs((n, 1)) for pois in poisErrs]
+        targetNoise = numpy.concatenate(poisCounts, axis=1)
+    decoyCounts = [numpy.random.multinomial(pr.ngene, pr.pmf, size=n)
+                   for pr in decoyBins]
+    for i in xrange(n): # analyze replicates
+        targetHits = numpy.random.multinomial(targetN[i], targetProbs)
+        if lambdaError:
+            hits = targetHits[:ntarget] + targetNoise[i]
+        else:
+            hits = targetHits[:ntarget]
+        scores = [(targetScores[j][k], 1, 0)
+                  for j,k in enumerate(hits) if k > 0]
+        for j, pr in enumerate(decoyBins):
+            scores += [(pr.sf[k], 0, g)
+                       for k,g in enumerate(decoyCounts[j][i])
+                       if g > 0 and k + pr.nmin > 0]
+        scores.sort()
+        yield scores
+
+
+def generate_hits_varsize2(n, nstrain, ntarget, geneSizes, decoyBins,
+                           lambdaTrue, lambdaError=0., pFail=0.,
+                           residual=1e-06):
+    '''this variant draws a set of different target genes for each of the
+    n samples.'''
+    lam = lambdaTrue * (1. - pFail) + lambdaError
+    decoyCounts = [numpy.random.multinomial(pr.ngene, pr.pmf, size=n)
+                   for pr in decoyBins]
+    poisMax = stats.poisson(sum(geneSizes[-ntarget:]) * lambdaTrue)
+    kMax = poisMax.isf(residual / nstrain) # biggest plausible k for target
+    for i in xrange(n): # analyze replicates
+        targetSizes = random.sample(geneSizes, ntarget) # draw target genes
+        total = sum(targetSizes)
+        poisTarget = stats.poisson(total * lambdaTrue)
+        cvec = numpy.arange(kMax)
+        pvec = poisTarget.pmf(cvec)
+        counts = numpy.random.multinomial(nstrain, pvec[1:] / (1. - pvec[0]))
+        targetN = (counts * cvec[1:]).sum() # total hits in target region
+        targetProbs = [(s / total * (1. - pFail)) for s in targetSizes] \
+                      + [pFail]
+        targetProbs = numpy.array(targetProbs)
+        targetHits = numpy.random.multinomial(targetN, targetProbs)
+        if lambdaError:
+            poisErrs = [stats.poisson(s * nstrain * lambdaError).rvs(1)[0]
+                        for s in targetSizes]
+            hits = targetHits[:ntarget] + numpy.array(poisErrs)
+        else:
+            hits = targetHits[:ntarget]
+        scores = [(stats.poisson(targetSizes[j] * nstrain * lam).sf(k - 1),
+                   1, 0) for j,k in enumerate(hits) if k > 0]
+        for j, pr in enumerate(decoyBins):
+            scores += [(pr.sf[k], 0, g)
+                       for k,g in enumerate(decoyCounts[j][i])
+                       if g > 0 and k + pr.nmin > 0]
+        scores.sort()
+        yield scores
 
 
 def sample_maxhit(n, nstrain, ntarget, ngene, lambdaTrue, lambdaError=0.,
@@ -154,7 +236,7 @@ def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
     '''Compute distribution of real targets detected above fdr, in
     multihit screen, using probability of hitting target
     gene(s) conditioned on requiring at least one such hit.'''
-    d = {}
+    pYield = numpy.zeros(ntarget + 1)
     p = 1. / n
     lam = lambdaTrue * (1. - pFail) + lambdaError
     prDecoy = PoissonRange(nstrain * lam, residual / ngene)
@@ -168,14 +250,51 @@ def sample_maxhit_rank(n, nstrain, ntarget, ngene, lambdaTrue,
             if float(nbad) / (nbad + nhit) > fdr:
                 break
             lastReal = nhit
-        d[lastReal] = d.get(lastReal, 0.) + p # update probability dist'n
-    return d
+        pYield[lastReal] += p # update probability dist'n
+    return pYield
 
-def expectation(d):
-    e = 0.
-    for x, p in d.items():
-        e += x * p
-    return e
+def calc_yield_varsize(n, nstrain, ntarget, geneSizes, lambdaTrue, decoyBins,
+                       lambdaError=0., pFail=0., fdr=0.67, residual=1e-06,
+                       targetProbs=None, genFunc=generate_hits_varsize,
+                       **kwargs):
+    '''Compute distribution of real targets detected above fdr, in
+    multihit screen, using probability of hitting target
+    gene(s) conditioned on requiring at least one such hit.'''
+    pYield = numpy.zeros(ntarget + 1)
+    p = 1. / n
+    for scores in genFunc(n, nstrain, ntarget, geneSizes, decoyBins,
+                          lambdaTrue, lambdaError, pFail, residual,
+                          **kwargs):
+        nhit = nbad = 0
+        for pval, targetGenes, decoyGenes in scores:
+            if decoyGenes > 0:
+                nbad += decoyGenes
+                if float(nbad) / (nbad + nhit) > fdr:
+                    break
+            else:
+                nhit += targetGenes
+        pYield[nhit] += p # update probability dist'n
+    return pYield
+
+
+def build_decoy_bins(geneSizes, nstrain, lam, nbin=10, **kwargs):
+    'construct nbin PoissonRange objects for variable gene sizes'
+    geneSizes.sort()
+    n = float(len(geneSizes)) / nbin # number of genes per bin, float
+    l = []
+    start = 0
+    for i in range(1, nbin + 1):
+        end = int(i * n)
+        avgSize = sum(geneSizes[start:end]) / float(end - start)
+        l.append(PoissonRange(avgSize * nstrain * lam, calcSF=True,
+                              ngene=end - start, **kwargs))
+        start = end # start of the next interval
+    return l
+
+
+def expectation(a):
+    'compute expectation value from an array of probabilities'
+    return (a * numpy.arange(len(a))).sum()
 
 class CutoffSuccess(object):
     def __init__(self, ngene, c=75, npool=4, epsilon=0.01,

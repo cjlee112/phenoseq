@@ -274,6 +274,15 @@ def get_gc_totals(annodb, dna):
     return gcTotal, atTotal, geneGCDict
 
 
+def gc_gene_sizes(annodb, dna, gcBias=36.):
+    'return GC-bias weighted sizes for whole genome and each gene'
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    total = gcTotal * gcBias + atTotal 
+    l = []
+    for gc, at in geneGCDict.values():
+        l.append(gc * gcBias + at)
+    return total, l
+
 def generate_subsets(tagFiles, annodb, al, dna, nbest=None, *args):
     'generate results from all possible subsets of tagFiles'
     d = {}
