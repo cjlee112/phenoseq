@@ -200,7 +200,7 @@ def read_genome_annots(gbfile, iseq=0, featureType='CDS'):
 
 
 class GeneSNPDict(dict):
-    def __init__(self, tagDict, annodb, al, dna):
+    def __init__(self, tagDict, annodb, al, dna, count_syn=False):
         dict.__init__(self)
         self.tagDict = tagDict
         self.annodb = annodb
@@ -226,7 +226,7 @@ class GeneSNPDict(dict):
                 codonAlt = codon[:ipos] + b + codon[ipos + 1:]
                 snp.aaRef = sequtil.translate_orf(codon)
                 snp.aaAlt = sequtil.translate_orf(codonAlt)
-                if snp.aaRef != snp.aaAlt: # only count non-synonymous muts
+                if count_syn or snp.aaRef != snp.aaAlt: # count this SNP
                     weight = 1
                     self.setdefault(gene, []).append((tag,snp))
                 else:
