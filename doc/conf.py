@@ -160,6 +160,8 @@ html_static_path = ['_static']
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'Phenoseqdoc'
 
+jsmath_path = 'jsMath/easy/load.js'
+
 
 # -- Options for LaTeX output --------------------------------------------------
 
