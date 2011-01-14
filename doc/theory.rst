@@ -65,6 +65,15 @@ We have to treat :math:`k=0` as a special case, since :math:`p(h=0)=0`:
 
 .. math:: p(k=0|\mu,\tau) = \frac{e^{\mu\tau(1-1/\tau)} -1}{e^{\mu\tau}-1}
 
+Note that while this is the correct marginal distribution for a single
+target gene, it should *not* be used to simulate real phenotype
+sequencing experiments.  
+Simply applying this marginal distribution independently
+to each target gene is not strictly valid, since the :math:`k` values for
+target genes in a phenotype sequencing experiment
+are *not* independent (due to the :math:`h \ge 0`
+condition for the entire target region)!
+
 By contrast, for a non-target gene, the count distribution is just:
 
 .. math:: p(k|\mu) = \frac{e^{-\mu}\mu^k}{k!}
