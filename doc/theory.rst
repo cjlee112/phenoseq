@@ -78,4 +78,64 @@ By contrast, for a non-target gene, the count distribution is just:
 
 .. math:: p(k|\mu) = \frac{e^{-\mu}\mu^k}{k!}
 
+Simulating a Phenotype Sequencing Experiment
+--------------------------------------------
+
+Target Genes
+............
+
+For a set of :math:`s` independent mutant strains that pass
+the phenotype screen, the distribution of the 
+total number of mutations in the target region simply follows
+the sum of :math:`s` independent draws from the conditional
+distribution :math:`p(h|h \ge 1, \mu,\tau)`.  
+We model this as follows: we extract the vector
+of values :math:`p_h = p(h|h \ge 1, \mu,\tau)`
+for a confidence interval :math:`h_{min},h_{max}` such that
+:math:`\sum_{h=h_{min}}^{h_{max}}{p_h} \ge 1-\delta`
+for a stringent confidence threshold :math:`\delta`, 
+construct a multinomial
+distribution from this probability vector, and draw samples
+of :math:`s` counts each from this multinomial.  Specifically,
+each draw is a vector of :math:`\{n_h\}` observation counts for
+each possible outcome :math:`h`, such that :math:`\sum_h{n_h}=s`.
+This yields a sample distribution for the total number of mutations 
+:math:`m=\sum_h{hn_h}` observed in the target region.
+
+Given :math:`m` mutations in the target region, we model the distribution
+of mutation counts in individual target genes as follows.  Assuming
+that there are :math:`\tau` total genes in the target region,
+we construct a multinomial based on a probability vector of
+uniform gene probabilities :math:`p_i = 1/\tau`, and draw a sample
+of :math:`m` counts, i.e. a vector :math:`\{n_i\}` such that
+:math:`\sum_i{n_i}=m`.  The :math:`n_i` represent the individual
+mutation counts in each target gene.  
+We then count the number of target genes :math:`g_k`
+with a specified number of mutations :math:`k`.
+We sample their distribution
+by generating :math:`n=1000` replicates of the above process,
+for any specific set of input parameters (:math:`\mu, \tau, s`, etc.).
+
+Non-target Genes
+................
+
+We modeled the distribution of mutation counts in non-target genes by
+a similar methodology.  If :math:`\mu` is the expected number of
+mutations per non-target gene in a single mutant strain, the
+distribution of total mutations per gene in :math:`s` independent
+strains is itself just a Poisson with mean :math:`s\mu`:
+
+.. math:: p(k|s, \mu) = \frac{e^{-s\mu}(s\mu)^k}{k!}
+
+Again, we extract a probability vector of values
+:math:`p_k = p(k|s,\mu)`
+for a confidence interval :math:`k_{min},k_{max}` such that
+:math:`\sum_{k=k_{min}}^{k_{max}}{p_k} \ge 1-\delta`,
+and construct a multinomial distribution from this probability
+vector.  The distribution of the number of genes :math:`g_k'` that 
+contain exactly :math:`k` mutations is given by drawing :math:`g-\tau`
+counts from this multinomial, where :math:`g` is the total number
+of genes in the genome, and :math:`\tau` is the number of target
+genes in the genome.
+
 
