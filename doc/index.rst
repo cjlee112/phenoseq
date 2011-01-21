@@ -12,6 +12,7 @@ Contents:
    :maxdepth: 2
 
    theory
+   usage_tutorial
 
 Indices and tables
 ==================
