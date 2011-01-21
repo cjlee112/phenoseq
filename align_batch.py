@@ -17,5 +17,6 @@ if __name__ == '__main__':
         # Skip the file of undecipherable reads.
         if tag == "other":
             continue
-        cmd = "./%s -d %s -o SAM -f s_%s_%s_qseq.txt > aligned_s_%s_%s.sam" % (novoalign_executable, index_filename, lane, tag, lane, tag)
-        subprocess.call(cmd)
+        cmd = "%s -d %s -o SAM -f s_%s_%s_qseq.txt > aligned_s_%s_%s.sam" % (novoalign_executable, index_filename, lane, tag, lane, tag)
+        print cmd
+        subprocess.call(cmd, shell=True)
