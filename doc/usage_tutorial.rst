@@ -42,17 +42,19 @@ Alignment then proceeds with the command::
 
     ./novoalign/novocraft/novoalign -d ecoli.nix -f s_1_ACTTGA_qseq.txt
 
-which aligns the reads in the file ``s_1_ACTTGA_qseq.txt`` against the index. Since there will be several such files, we can automate this process with a simple shell script (align_batch.csh)::
+which aligns the reads in the file ``s_1_ACTTGA_qseq.txt`` against the index. Since there will be several such files, we can automate this process with a simple script align_batch.py::
 
-    #!/bin/csh 
-    #                                                                                                          
-    foreach l ( 1 2 3 )                                                                                        
-    foreach t ( ACAGTG ACTTGA ATCACG CAGATC CGATGT CTTGTA GATCAG GCCAAT TGACCA TTAGGC )                      
-        ./novoalign/novocraft/novoalign -d ecoli.nix -o SAM -f s_$l"_"$t"_"qseq.txt > aligned_s_$l"_"$t.sam    
-    end                                                                                                      
-    end
+    python align_batch.py <novoalign_executable> <index_filename>
 
-The ``-o SAM`` option outputs the data in SAMTOOLS format.
+e.g.
+
+    python align_batch.py novoalign/novocraft/novoalign ssuis.nix
+
+This script executes commands such as
+
+    ./novoalign/novocraft/novoalign -d ssuis.nix -o SAM -f s_1_CGATGT_qseq.txt > aligned_s_1_CGATGT.sam
+
+The ``-o SAM`` option outputs the data in SAMTOOLS format and the aligned reads are in aligned_s_1_CGATGT.sam .
 
 See 
 
