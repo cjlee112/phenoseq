@@ -11,8 +11,9 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   theory
    usage_tutorial
+   reference/analyze
+   theory
 
 Indices and tables
 ==================
