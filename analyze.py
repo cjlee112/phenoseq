@@ -175,9 +175,12 @@ def read_vcf_singleton(vcfFile):
     return TagDict(d)
 
 
-def read_genome_annots(gbfile, iseq=0, featureType='CDS'):
+def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
+    'construct annotation DB for gene coding regions in a genome'
     features = list(SeqIO.parse(gbfile, 'genbank'))[iseq].features
-    genome = seqdb.SequenceFileDB(gbfile.split('.')[0] + '.fna')
+    if fastafile is None:
+        fastafile = gbfile.split('.')[0] + '.fna'
+    genome = seqdb.SequenceFileDB(fastafile)
     seqID = genome.keys()[iseq]
     annodb = annotation.AnnotationDB({}, genome,
                                      sliceAttrDict=dict(id=0, start=1, stop=2,
