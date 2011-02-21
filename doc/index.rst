@@ -13,6 +13,7 @@ Contents:
 
    usage_tutorial
    reference/analyze
+   reference/simulate
    theory
 
 Indices and tables
