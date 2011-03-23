@@ -69,6 +69,43 @@ aspects of how to use the simulation module:
     of the real mutations present in each strain.
 
 
+Examples
+--------
+
+Modeling "Ideal" Phenotype Sequencing Yields
+............................................
+
+The discovery yield of phenotype sequencing depends crucially on
+the number of mutant strains sequenced.  To analyze this, it is
+convenient to begin in an idealized setting where the effects 
+of sequencing error and coverage are ignored, i.e. assuming
+that every mutation is detected, and there are no false positives.
+
+Example: compute the probability of finding the target gene as
+the top scoring hit, out of 25,000 mouse exome genes with a mutation
+density of 0.01 mutations / gene, using one to eight mutant genomes::
+
+   pYield = [simulate.sample_maxhit(1000, i, 1, 25000, .01)[0] for i in range(1, 9)]
+
+
+Example: compute the probability of finding the target gene among
+the top five hits, out of 25,000 mouse exome genes with a mutation
+density of 0.1 mutations / gene, using one to eight mutant genomes::
+
+   pYield = [simulate.sample_maxhit_rank(1000, i, 1, 25000, .1, fdr=.8)[1] for i in range(1, 9)]
+
+
+Modeling the effects of sequencing error and coverage
+.....................................................
+
+Example: compute the yield for a single target gene in a mouse exome
+of 25,000 genes at mutation density 0.01 mutation / gene, with a
+total exome size of 50 Mb, for 8 mutant genomes with a pooling factor
+of 4, 100x coverage, and default (1%) sequencing error rate::
+
+   yieldMax, cutoff = optimal_yield(8, 4, 100, nmut=250, ntarget=1, ngene=25000, ntotal=50e+06)
+
+
 Convenience Functions
 ---------------------
 
@@ -119,7 +156,9 @@ Convenience Functions
    probability distribution *pYield* representing the probability
    that at least *i* true targets will be detected at the specified
    false discovery rate.  In other words, ``pYield[0]`` is the probability
-   that no true targets are discovered in one experiment.
+   that no true targets are discovered in one experiment,
+   and ``pYield[i]`` is the probability
+   that ``i`` true targets are discovered in one experiment.
 
    *fdr* is the false discovery rate, i.e. the maximum fraction of
    non-target genes allowed before truncating the list of top-scoring
@@ -141,6 +180,29 @@ Convenience Functions
 
    *kwargs*, if any, are passed as keyword arguments to *genFunc*.
 
-
+.. function:: optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50, ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98, nwait=4, mutFac=3., **kwargs)
    
+   Model the achievable yield for a given phenotype sequencing experiment
+   design, consisting of the following factors:
+
+   * *nstrain*: the number of mutant genomes
+   * *npool*: the pooling factor, i.e. number of strains per library
+   * *c*: the total coverage used for all strains, i.e. average number
+     of reads covering any given nucleotide position.  Thus, the average
+     number of reads per strain at any given position is ``c/npool``.
+   * *epsilon*: sequencing error rate per base per read.
+   * *nmut*: total number of mutations per genome
+   * *ntarget*: number of target genes
+   * *ngene*: total number of genes
+   * *ntotal*: total effective size of the genome for your experiment.
+     If you are sequencing the whole genome it's simply the total nucleotides
+     in your genome.  If you're sequencing an exome, it's the size of
+     the exome you are sequencing.
+   * *kwargs*, if any, are passed to :func:`simulate.sample_maxhit_rank()`.
+
+   Returns a tuple ``yieldMax, cutoff`` where ``yieldMax`` is the best
+   achievable yield from :func:`simulate.sample_maxhit_rank()`, and
+   ``cutoff`` is the number of reads required to report a mutation
+   at a given nucleotide.
+
 
