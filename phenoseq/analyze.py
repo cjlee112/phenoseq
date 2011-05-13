@@ -177,7 +177,17 @@ def read_vcf_singleton(vcfFile):
 
 def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
     'construct annotation DB for gene coding regions in a genome'
-    features = list(SeqIO.parse(gbfile, 'genbank'))[iseq].features
+    try:
+        gbparse = SeqIO.parse(gbfile, 'genbank')
+    except TypeError: # SeqIO changed its interface?
+        ifile = open(gbfile)
+        try:
+            gbparse = SeqIO.parse(ifile, 'genbank')
+            features = list(gbparse)[iseq].features
+        finally:
+            ifile.close()
+    else:
+        features = list(gbparse)[iseq].features
     if fastafile is None:
         fastafile = gbfile.split('.')[0] + '.fna'
     genome = seqdb.SequenceFileDB(fastafile)
