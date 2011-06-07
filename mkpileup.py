@@ -50,4 +50,5 @@ if __name__ == '__main__':
     for samfile in sys.argv[2:]:
         print 'processing', samfile
         bamfile = sam2bam(samfile)
-        bam2pileup(bamfile, reffile)
+        find_snps([bamfile], reffile)
+        #bam2pileup(bamfile, reffile)
