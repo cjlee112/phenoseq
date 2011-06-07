@@ -108,12 +108,25 @@ def binom_filter(snp, p=0.01, s=4e+06):
     'return True if snp passes sequencing error cutoff'
     return snp.nalt >= get_binom_cutoff(snp.nreads, p, s)
 
+class SNPSet(object):
+    'filter SNP candidates from one lane using filter expression'
+    def __init__(self, vcfFile,
+                 filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90'):
+        self.snps = read_vcf(vcfFile, add_attrs=add_snp_attrs)
+        self.filterExpr = filterExpr
+
+    def __iter__(self):
+        for snp in self.snps:
+            if eval(self.filterExpr):
+                yield snp
+        
+
 class ReplicateSet(object):
     'filters SNP candidates using replicate lanes'
-    def __init__(self, mergedFile, replicateFiles, minRep=2, maxF=0.5):
+    def __init__(self, mergedFile, replicateFiles,
+                 filterExpr='snp.af1 <= 0.5 and len(self[snp]) >= 2'):
         self.snps = read_vcf(mergedFile, add_attrs=add_snp_attrs)
-        self.minRep = minRep
-        self.maxF = maxF
+        self.filterExpr = filterExpr
         self.replicates = []
         d = {}
         for path in replicateFiles: # read replicate lanes
@@ -130,17 +143,17 @@ class ReplicateSet(object):
     def __iter__(self):
         'generate all snps matching filter criteria'
         for snp in self.snps:
-            if snp.af1 <= self.maxF and len(self[snp]) >= self.minRep:
+            if eval(self.filterExpr):
                 yield snp
 
 
 class TagDict(dict):
     'keys are tags, values are ReplicateSet objects'
-    def __init__(self, tagDict):
+    def __init__(self, tagDict, containerClass=SNPSet):
         dict.__init__(self)
         d = {}
         for tag,args in tagDict.items():
-            self[tag] = ReplicateSet(*args)
+            self[tag] = containerClass(*args)
 
     def get_snps(self):
         'get all filtered SNPs sorted in ascending positional order'
@@ -158,16 +171,25 @@ def get_filestem(s):
 def get_replicate_files(s):
     return glob.glob('*_' + s + '.vcf')
 
-def read_tag_files(tagFiles, tagfunc=get_filestem,
-                      replicatefunc=get_replicate_files,
-                      *args):
-    'construct TagDict for all these tagFiles'
+def read_tag_files(tagFiles, tagfunc=get_filestem, *args):
+    'construct TagDict for multiple tagFiles'
+    d = {}
+    for tagFile in tagFiles:
+        tag = tagfunc(tagFile)
+        d[tag] = (tagFile,) + args
+    return TagDict(d)
+
+def read_replicate_files(tagFiles, tagfunc=get_filestem,
+                         replicatefunc=get_replicate_files,
+                         *args):
+    'construct TagDict for multiple tags each with replicate files'
     d = {}
     for tagFile in tagFiles:
         tag = tagfunc(tagFile)
         repFiles = replicatefunc(tag)
         d[tag] = (tagFile, repFiles) + args
-    return TagDict(d)
+    return TagDict(d, containerClass=ReplicateSet)
+
 
 def read_vcf_singleton(vcfFile):
     'load dataset consisting of a single vcf file'
