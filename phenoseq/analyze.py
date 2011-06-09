@@ -271,8 +271,13 @@ class GeneSNPDict(dict):
             else:
                 self.nAT += weight
 
-    def get_scores(self, gcTotal=None, atTotal=None, geneGCDict=None):
+    def get_scores(self, gcTotal=None, atTotal=None, geneGCDict=None,
+                   useBonferroni=True):
         'will use pre-computed GC/AT count data if you provide it'
+        if useBonferroni:
+            correction = len(self)
+        else:
+            correction = 1.
         if gcTotal is None:
             gcTotal, atTotal = calc_gc(str(self.dna))
         results = []
@@ -283,7 +288,7 @@ class GeneSNPDict(dict):
                 gcLen, atLen = calc_gene_gc(self.annodb, k)
             pois = stats.poisson(self.nGC * float(gcLen) / gcTotal +
                                  self.nAT * float(atLen) / atTotal)
-            results.append((pois.sf(len(v) - 1), k))
+            results.append((correction * pois.sf(len(v) - 1), k))
         results.sort()
         return results
 

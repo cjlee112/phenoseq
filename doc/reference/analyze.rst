@@ -112,7 +112,10 @@ The SNP object
 .. class:: SNP(colnames, fields, add_attrs=None, **kwargs)
 
    A generic object for representing a SNP, simply as a Python
-   object with attributes.  It provides no methods.
+   object with attributes.  It provides no methods.  It is typically
+   initialized from VCF data and carries all the VCF information
+   fields as its attributes; attribute names are lower-case.  E.g.
+   to access the AF1 field, use the SNP object's *af1* attribute.
 
    * *colnames*: a list of attribute names to use for the data in *fields*
 
@@ -124,10 +127,31 @@ The SNP object
    * *kwargs*: optional key=value pairs to bind as additional attributes
      for this SNP object.
 
+.. class:: SNPSet(vcfFile, filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90')
+
+   A convenience class for reading data from a VCF file representing a sample.
+
+   *vcfFile*: a VCF file path containing merged SNP data
+
+   *filterExpr* must be a string containing a valid Python expression.
+   If this expression evaluates True, then the SNP will be reported,
+   otherwise it will not be reported.  This expression has access
+   to global and local variables, principally the *snp* object
+   representing the SNP currently being assessed.  Note that the 
+   default filter requires that the SNP be called as 50% or less
+   of the sample, that it not show strong evidence of strand-bias
+   as indicated by the PV4 strand-bias p-value, and that its reported
+   quality be above 90.
+
+.. method:: SNPSet.__iter__()
+
+   Iterate over all :class:`SNP` objects that pass the above criteria.
+
+
 Comparing data from replicate runs
 ..................................
 
-.. class:: ReplicateSet(mergedFile, replicateFiles, minRep=2, maxF=0.5)
+.. class:: ReplicateSet(mergedFile, replicateFiles, filterExpr='snp.af1 <= 0.5 and len(self[snp]) >= 2')
 
    A convenience class for reading data for two or more replicate
    SNP datasets.
@@ -138,13 +162,14 @@ Comparing data from replicate runs
    *replicateFiles*: a list of file paths representing each of the 
    replicate SNP datasets, each in VCF format.
 
-   *minRep*: the minimum number of times a given :class:`SNP` must
-   replicate (i.e. the number of replicate datasets that report it)
-   in order for it to be reported by :class:`ReplicateSet`.
-
-   *maxF*: the maximum reported frequency that a given :class:`SNP`
-   can have in the merged dataset, in order for it to be reported by
-   :class:`ReplicateSet`.
+   *filterExpr* must be a string containing a valid Python expression.
+   If this expression evaluates True, then the SNP will be reported,
+   otherwise it will not be reported.  This expression has access
+   to global and local variables, principally the *snp* object
+   representing the SNP currently being assessed.  Note that the 
+   default filter requires that the SNP be called as 50% or less
+   of the sample, and that it was found independently in at least
+   two of the replicate datasets.
 
 .. method:: ReplicateSet.__iter__()
 
@@ -217,7 +242,7 @@ Gene to SNP mapping and scoring
    *count_syn*: if True, includes synonymous mutations in the 
    analysis.  By default they are excluded from the analysis.
 
-.. method:: GeneSNPDict.get_scores(gcTotal=None, atTotal=None, geneGCDict=None)
+.. method:: GeneSNPDict.get_scores(gcTotal=None, atTotal=None, geneGCDict=None, useBonferroni=True)
 
    Returns a sorted list of ``(p_value, geneID)`` giving the 
    phenotype sequencing scores for all genes in which SNPs were reported.
@@ -236,4 +261,9 @@ Gene to SNP mapping and scoring
    ``(gcTotal, atTotal)`` specifically for each gene.  If None,
    the values are calculated automatically from the *annodb*
    passed to the constructor.
+
+   *useBonferroni*: if True, all p-values are multiplied by the
+   total number of genes being tested (i.e. the number of genes
+   in which SNPs were reported).  Otherwise, no such correction
+   is performed.
 
