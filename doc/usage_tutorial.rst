@@ -28,7 +28,7 @@ The number L is the lane, and the number n is the tile number.
 For each tile, there are 2 files. The fragments are in the file with a 
 1 after the second underscore and the tags associated to those fragments 
 are in the file with the 2 after the underscore. The tags used can be 
-found in the file "SampleSheet.csv". Because the tags are designed with 
+found in the file "SampleSheet.csv" and should be given directly in the command line since the file may noto be available. Because the tags are designed with 
 error correction in mind, if a reported tag differs from one of the tags 
 in the sample sheet file by just one base, we assume that it was tagged 
 with that tag.
@@ -36,7 +36,7 @@ with that tag.
 The script demultiplex.py can process the raw files and separate the reads 
 by tag::
 
-    python demultiplex.py SampleSheet.csv data_directory
+    python demultiplex.py data_directory AACTCG ATGTGC GTCATT ...
 
 The output is a collection of files of the form ``s_(lane)_(tag)_qseq.txt`` .
 
@@ -78,7 +78,7 @@ Analyzing
 
 SNP analysis is handled by mkpileup.py and analyze.py. The first script produces vcf files from the .sam files from the alignment::
 
-    python mkpileup.py NC_000913.gbk [ACGT]*.vcf. 
+    python mkpileup.py NC_000913.fna aligned*.sam
 
 These files can then be processed by analyze.py::
 
