@@ -31,10 +31,13 @@ def convert_number(s):
     'convert string to number if possible'
     if not s[0].isdigit():
         return s
-    elif s.find('.') >= 0 or s.lower().find('e') >= 0:
-        return float(s)
-    else:
-        return int(s)
+    try:
+        if s.find('.') >= 0 or s.lower().find('e') >= 0:
+            return float(s)
+        else:
+            return int(s)
+    except ValueError:
+        return s
 
 
 class SNP(object):
@@ -45,13 +48,22 @@ class SNP(object):
                 continue
             if k == 'INFO':
                 for s in fields[i].split(';'):
-                    k,v = s.split('=')
+                    try:
+                        k,v = s.split('=')
+                    except ValueError: # VCF files contain DS with no value?
+                        k = s
+                        v = None
+                        continue
                     l = v.split(',')
                     if len(l) > 1:
                         setattr(self, k.lower(),
                                 [convert_number(x) for x in l])
                     else:
                         setattr(self, k.lower(), convert_number(v))
+            elif k == 'FORMAT' and i + 2 <= len(fields):
+                vals = fields[i + 1].split(':')
+                for j,k in enumerate(fields[i].split(':')):
+                    setattr(self, k.lower(), convert_number(vals[j]))
             else:
                 setattr(self, k.lower(), convert_number(fields[i]))
         for k,v in kwargs.items():
@@ -59,12 +71,14 @@ class SNP(object):
         if add_attrs is not None:
             add_attrs(self)
 
+
 def add_snp_attrs(self):
     'add convenience attributes for SNP'
     self.nreads = sum(self.dp4)
     self.nalt = sum(self.dp4[2:])
 
-def read_vcf(path, **kwargs):
+def read_vcf(path, vcffields=('CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL',
+                              'FILTER', 'INFO', 'FORMAT'), **kwargs):
     'read VCF file and return list of SNP objects'
     ifile = open(path)
     l = []
