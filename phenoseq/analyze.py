@@ -121,9 +121,9 @@ def filter_snps_repfiles(snps, replicateFiles,
         repSnps = read_vcf(path, add_attrs=add_snp_attrs)
         replicates.append(repSnps)
         for snp in repSnps: # index SNP records from replicate lanes
-            repMap.setdefault((snp.pos, snp.alt), []).append(snp)
+            repMap.setdefault((snp.chrom, snp.pos, snp.alt), []).append(snp)
     def get_replicates(s):
-        return repMap.get((s.pos, s.alt), ())
+        return repMap.get((s.chrom, s.pos, s.alt), ())
         
     for snp in snps:
         if eval(self.filterExpr):
@@ -135,67 +135,39 @@ def filter_snps_repfiles(snps, replicateFiles,
 #######################################################################
 # utilities for processing multiple tagged libraries
 
-class TagDict(dict):
-    'keys are tags, values are lists of SNPs'
-    def __init__(self, tagDict, filterFunc=filter_snps):
-        dict.__init__(self)
-        d = {}
-        for tag,args in tagDict.items():
-            snps = read_vcf(args[0], add_attrs=add_snp_attrs)
-            snps = list(filterFunc(snps, *args[1:])) # apply false+ filter
-            for snp in snps:
-                snp.tag = tag # mark each snp based on library it was found in
-            self[tag] = snps
-
-    def get_snps(self):
-        'get filtered SNPs from all tags sorted in ascending positional order'
-        l = []
-        for tag, snps in self.items():
-            l += snps
-        l.sort(lambda x,y: cmp(x.pos, y.pos)) # sort by ascending position
-        return l
-
-
 def get_filestem(s):
     return s.split('.')[0]
 
 def get_replicate_files(s):
     return glob.glob('*_' + s + '.vcf')
 
-def read_tag_files(tagFiles, tagfunc=get_filestem, *args):
-    'construct TagDict for multiple tagFiles'
-    d = {}
+def read_tag_files(tagFiles, tagfunc=get_filestem, filterFunc=filter_snps,
+                   replicatefunc=None, add_attrs=add_snp_attrs, *args, **kwargs):
+    'merge SNPs from multiple tagFiles, with optional filtering'
+    l = []
     for tagFile in tagFiles:
         tag = tagfunc(tagFile)
-        d[tag] = (tagFile,) + args
-    return TagDict(d)
+        snps = read_vcf(tagFile, tag=tag, add_attrs=add_attrs, **kwargs)
+        if replicatefunc:
+            repFiles = replicatefunc(tag)
+            snps = list(filterFunc(snps, repFiles, *args))
+        if filterFunc:
+            snps = list(filterFunc(snps, *args))
+        l += snps
+    return l
 
-def read_replicate_files(tagFiles, tagfunc=get_filestem,
-                         replicatefunc=get_replicate_files,
-                         *args):
-    'construct TagDict for multiple tags each with replicate files'
-    d = {}
-    for tagFile in tagFiles:
-        tag = tagfunc(tagFile)
-        repFiles = replicatefunc(tag)
-        d[tag] = (tagFile, repFiles) + args
-    return TagDict(d, filter_snps_repfiles)
-
-
-def read_vcf_singleton(vcfFile):
-    'load dataset consisting of a single vcf file'
-    d = dict(mytag=(vcfFile, (), 0))
-    return TagDict(d)
 
 
 
 
 
 #######################################################################
-# gene annotation reading and basic composition analysis functions
+# gene annotation reading
 
-def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
-    'construct annotation DB for gene coding regions in a genome'
+def read_genbank_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
+    '''construct annotation DB for gene CDS intervals.
+    NB: this assumes each gene consists of ONE interval.
+    This cannot be used for multi-exon genes!'''
     try:
         gbparse = SeqIO.parse(gbfile, 'genbank')
     except TypeError: # SeqIO changed its interface?
@@ -229,6 +201,77 @@ def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
         al.addAnnotation(a)
     al.build()
     return annodb, al, genome[seqID]
+
+
+def read_known_genes(path, sep='\t'):
+    '''read UCSC knownGene file to obtain exon dict whose values are gene ID
+    (first transcript ID in that gene)'''
+    d = {}
+    genes = {}
+    trLen = {}
+    ifile = open(path)
+    try:
+        for line in ifile:
+            line = line.strip()
+            t = line.split(sep)
+            trID, seqID = t[:2]
+            if t[2] == '-':
+                ori = -1
+            else:
+                ori = 1
+            geneID = trID
+            stops = t[9].split(',')
+            exons = []
+            length = 0
+            for i,start in enumerate(t[8].split(',')[:-1]):
+                start = int(start)
+                stop = int(stops[i])
+                length += stop - start
+                exons.append((start, stop))
+                try: # see if exon already stored
+                    geneID = d[(seqID, ori, start, stop)]
+                except KeyError:
+                    pass
+            for exon in exons: # save exons as belonging to this gene
+                d[(seqID, ori, exon[0], exon[1])] = geneID
+            genes.setdefault(geneID, []).append(trID)
+            trLen[trID] = length
+    finally:
+        ifile.close()
+    return d, genes, trLen
+
+def get_gene_maxlengths(genes, trLen):
+    'get dict of gene lengths based on longest transcript'
+    d = {}
+    for gene, transcripts in genes.items():
+        d[gene] = max([trLen[txID] for txID in transcripts])
+    return d
+
+def read_exon_annots(genome, genesFile='knownGene.txt'):
+    '''read multi-exon transcript set and build exon annotation db
+    and exon-to-gene mapping'''
+    exonDict, genes, trLen = read_known_genes(genesFile)
+    geneLengths = get_gene_maxlengths(genes, trLen)
+    totalSize = sum(geneLengths.values())
+    annodb = annotation.AnnotationDB({}, genome,
+                                     sliceAttrDict=dict(id=0, orientation=1,
+                                                        start=2, stop=3))
+    al = cnestedlist.NLMSA('tmp', 'memory', pairwiseMode=True,
+                           maxlen=1000000000)
+    i = 0
+    exonGene = {}
+    for t,geneID in exonDict.iteritems():
+        a = annodb.new_annotation(i, t)
+        exonGene[i] = geneID
+        i += 1
+        al.addAnnotation(a)
+    al.build()
+    return annodb, al, exonGene, totalSize, geneLengths
+
+
+
+#######################################################################
+# basic composition analysis functions
 
 def calc_gc(s):
     'calc GC and AT counts in string s'
@@ -267,8 +310,26 @@ def gc_gene_sizes(annodb, dna, gcBias=36.):
 #######################################################################
 # snp mapping and impact filtering functions
 
-def map_snps(snps, annodb, al, dna):
-    'map snps to genes, returning dict of {gene:[snp1, snp2, ...]}'
+def map_snps(snps, al, genome, exonGene):
+    '''map snps to genes, returning dict of {gene:[snp1, snp2, ...]}.
+    NB: this assumes al contains mapping to exon annotations, whose
+    IDs can be mapped to gene IDs by exonGene.'''
+    geneSNP = {}
+    for snp in snps:
+        ival = genome[snp.chrom][snp.pos - 1:snp.pos]
+        try:
+            a = al[ival].keys()[0]
+        except IndexError:
+            pass
+        else:
+            geneID = exonGene[a.id]
+            geneSNP.setdefault(geneID, []).append(snp)
+    return geneSNP
+
+
+def map_snps_chrom1(snps, al, dna):
+    '''map snps to genes, returning dict of {gene:[snp1, snp2, ...]}.
+    NB: this assumes all snps map on a single chromosome!'''
     d = {}
     for snp in snps:
         try:
@@ -316,7 +377,9 @@ def filter_nonsyn(geneSNPdict):
 def score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None,
                        geneGCDict=None, useBonferroni=True, dnaseq=None,
                        annodb=None):
-    'will use pre-computed GC/AT count data if you provide it'
+    '''Uses poisson scoring for pooled library data (i.e. where
+    multiple samples are pooled in each library).
+    Will use pre-computed GC/AT count data if you provide it'''
     if useBonferroni:
         correction = len(geneSNPdict)
     else:
@@ -344,6 +407,28 @@ def score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None,
     return results
 
 
+def score_genes(geneSNPdict, nsample, totalSize, geneLengths,
+                useBonferroni=True):
+    '''Uses binomial scoring for unpooled library data (i.e. each library
+    tag is a single sample.'''
+    if useBonferroni:
+        correction = len(geneSNPdict)
+    else:
+        correction = 1.
+    nSNP = sum([len(l) for l in geneSNPdict.values()]) # total in all samples
+    mu = float(nSNP) / (nsample * totalSize) # SNP density per exome nucleotide
+    geneScores = []
+    for geneID, snps in geneSNPdict.items():
+        d = {}
+        for snp in snps: # only count one snp per sample
+            d[snp.tag] = 0
+        pois = stats.poisson(mu * geneLengths[geneID]) # pmf for one sample
+        pmf = stats.binom(nsample, pois.sf(0))
+        geneScores.append((correction * pmf.sf(len(d) - 1), geneID))
+    geneScores.sort()
+    return geneScores
+
+
 
 #######################################################################
 # sub-experiment analysis utilities
@@ -358,8 +443,8 @@ def generate_subsets(tagFiles, annodb, al, dna, nbest=None, *args):
         print 'subset', i
         l = [tagFile for (j, tagFile) in enumerate(tagFiles)
              if i & pow(2, j)]
-        tagDict = read_tag_files(l, *args)
-        results = analyze_nonsyn(tagDict, annodb, al, dna,
+        snps = read_tag_files(l, *args)
+        results = analyze_nonsyn(snps, annodb, al, dna,
                                  gcTotal, atTotal, geneGCDict)
         d[tuple([s.split('.')[0] for s in l])] = results[:nbest]
     return d
@@ -377,8 +462,8 @@ def process_pools(poolFiles, annodb, al, dna, tagFunc=get_pool_tags,
     d = {}
     gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
     for poolFile in poolFiles:
-        tagDict = read_vcf_singleton(poolFile)
-        results = analyze_nonsyn(tagDict, annodb, al, dna,
+        snps = read_vcf_singleton(poolFile)
+        results = analyze_nonsyn(snps, annodb, al, dna,
                                  gcTotal, atTotal, geneGCDict)
         d[tagFunc(poolFile)] = results[:nbest]
     return d
@@ -413,9 +498,9 @@ def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
     for i in npools:
         for pfiles in enumerate_pool_subsets(poolFiles, i):
             print 'analyzing', pfiles
-            tagDict = read_tag_files(pfiles, tagfunc, replicatefunc,
+            snps = read_tag_files(pfiles, tagfunc, replicatefunc,
                                      minRep, *args)
-            results = analyze_nonsyn(tagDict, annodb, al, dna,
+            results = analyze_nonsyn(snps, annodb, al, dna,
                                      gcTotal, atTotal, geneGCDict)
             k = reduce(lambda x,y:x + y, [get_pool_tags(t) for t in pfiles])
             d[k] = results[:nbest]
@@ -426,21 +511,30 @@ def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
 #######################################################################
 # simple examples of how to run a complete analysis
 
-def analyze_nonsyn(tagDict, annodb, al, dna, gcTotal=None, atTotal=None,
+def analyze_nonsyn(snps, annodb, al, dna, gcTotal=None, atTotal=None,
                    geneGCDict=None):
     'scores genes based on non-synonymous SNPs only'
-    gsd = map_snps(tagDict.get_snps(), annodb, al, dna)
+    gsd = map_snps_chrom1(snps, al, dna)
     gsd = filter_nonsyn(gsd)
     return score_genes_pooled(gsd, gcTotal, atTotal, geneGCDict,
                               dnaseq=dna, annodb=annodb)
 
+
+def analyze_monodom(genome, vcfFiles=glob.glob('*.vcf'),
+                    genesFile='knownGene.txt'):
+    snps = read_tag_files(vcfFiles, filterFunc=None, add_attrs=None)
+    annodb, al, exonGene, totalSize, geneLengths = \
+            read_exon_annots(genome, genesFile)
+    gsd = map_snps(snps, al, genome, exonGene)
+    return score_genes(gsd, len(vcfFiles), totalSize, geneLengths)
+
 if __name__ == '__main__':
     print 'reading gene annotations from', sys.argv[1]
-    annodb, al, dna = read_genome_annots(sys.argv[1])
+    annodb, al, dna = read_genbank_annots(sys.argv[1])
     tagFiles = sys.argv[2:]
     print 'reading tag files:', tagFiles
-    tagDict = read_tag_files(tagFiles)
+    snps = read_tag_files(tagFiles)
     print 'scoring genes...'
-    results = analyze_nonsyn(tagDict, annodb, al, dna)
+    results = analyze_nonsyn(snps, annodb, al, dna)
     print 'top 20 hits:', results[:20]
     
