@@ -86,15 +86,17 @@ def read_vcf(path, vcffields=('CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL',
     'read VCF file and return list of SNP objects'
     ifile = open(path)
     l = []
-    for line in ifile:
-        line = line.strip()
-        if line[:2] == '##':
-            continue
-        elif line[0] == '#':
-            vcffields = line[1:].split('\t')
-        else:
-            l.append(SNP(vcffields, line.split('\t'), **kwargs))
-    ifile.close()
+    try:
+        for line in ifile:
+            line = line.strip()
+            if line[:2] == '##':
+                continue
+            elif line[0] == '#':
+                vcffields = line[1:].split('\t')
+            else:
+                l.append(SNP(vcffields, line.split('\t'), **kwargs))
+    finally:
+        ifile.close()
     return l
 
 
@@ -103,18 +105,16 @@ def read_vcf(path, vcffields=('CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL',
 #######################################################################
 # snp false positive filtering functions
 
-def filter_snp_file(vcfFile,
-                    filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90'):
+def filter_snps(snps,
+                filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90'):
     'filter SNPs using attribute expressions'
-    snps = read_vcf(vcfFile, add_attrs=add_snp_attrs)
     for snp in snps:
         if eval(filterExpr):
             yield snp
 
-def filter_snp_repfiles(mergedFile, replicateFiles,
-                        filterExpr='snp.af1 <= 0.5 and len(get_replicates(snp)) >= 2'):
+def filter_snps_repfiles(snps, replicateFiles,
+                         filterExpr='snp.af1 <= 0.5 and len(get_replicates(snp)) >= 2'):
     'filters SNP candidates using replicate lanes'
-    snps = read_vcf(mergedFile, add_attrs=add_snp_attrs)
     replicates = []
     repMap = {}
     for path in replicateFiles: # read replicate lanes
@@ -137,11 +137,12 @@ def filter_snp_repfiles(mergedFile, replicateFiles,
 
 class TagDict(dict):
     'keys are tags, values are lists of SNPs'
-    def __init__(self, tagDict, filterFunc=filter_snp_file):
+    def __init__(self, tagDict, filterFunc=filter_snps):
         dict.__init__(self)
         d = {}
         for tag,args in tagDict.items():
-            snps = list(filterFunc(*args))
+            snps = read_vcf(args[0], add_attrs=add_snp_attrs)
+            snps = list(filterFunc(snps, *args[1:])) # apply false+ filter
             for snp in snps:
                 snp.tag = tag # mark each snp based on library it was found in
             self[tag] = snps
@@ -178,7 +179,7 @@ def read_replicate_files(tagFiles, tagfunc=get_filestem,
         tag = tagfunc(tagFile)
         repFiles = replicatefunc(tag)
         d[tag] = (tagFile, repFiles) + args
-    return TagDict(d, filter_snp_repfiles)
+    return TagDict(d, filter_snps_repfiles)
 
 
 def read_vcf_singleton(vcfFile):
