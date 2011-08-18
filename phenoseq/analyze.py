@@ -122,60 +122,51 @@ def binom_filter(snp, p=0.01, s=4e+06):
     'return True if snp passes sequencing error cutoff'
     return snp.nalt >= get_binom_cutoff(snp.nreads, p, s)
 
-class SNPSet(object):
-    'filter SNP candidates from one lane using filter expression'
-    def __init__(self, vcfFile,
-                 filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90'):
-        self.snps = read_vcf(vcfFile, add_attrs=add_snp_attrs)
-        self.filterExpr = filterExpr
+def filter_snp_file(vcfFile,
+                    filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90'):
+    'filter SNPs using attribute expressions'
+    snps = read_vcf(vcfFile, add_attrs=add_snp_attrs)
+    for snp in snps:
+        if eval(filterExpr):
+            yield snp
 
-    def __iter__(self):
-        for snp in self.snps:
-            if eval(self.filterExpr):
-                yield snp
-        
-
-class ReplicateSet(object):
+def filter_snp_repfiles(mergedFile, replicateFiles,
+                        filterExpr='snp.af1 <= 0.5 and len(get_replicates(snp)) >= 2'):
     'filters SNP candidates using replicate lanes'
-    def __init__(self, mergedFile, replicateFiles,
-                 filterExpr='snp.af1 <= 0.5 and len(self[snp]) >= 2'):
-        self.snps = read_vcf(mergedFile, add_attrs=add_snp_attrs)
-        self.filterExpr = filterExpr
-        self.replicates = []
-        d = {}
-        for path in replicateFiles: # read replicate lanes
-            snps = read_vcf(path, add_attrs=add_snp_attrs)
-            self.replicates.append(snps)
-            for snp in snps: # index SNP records from replicate lanes
-                d.setdefault((snp.pos, snp.alt), []).append(snp)
-        self.repMap = d
+    snps = read_vcf(mergedFile, add_attrs=add_snp_attrs)
+    replicates = []
+    repMap = {}
+    for path in replicateFiles: # read replicate lanes
+        repSnps = read_vcf(path, add_attrs=add_snp_attrs)
+        replicates.append(repSnps)
+        for snp in repSnps: # index SNP records from replicate lanes
+            repMap.setdefault((snp.pos, snp.alt), []).append(snp)
+    def get_replicates(s):
+        return repMap.get((s.pos, s.alt), ())
+        
+    for snp in snps:
+        if eval(self.filterExpr):
+            yield snp
 
-    def __getitem__(self, snp):
-        'get repMap records matching this snp pos and letter'
-        return self.repMap.get((snp.pos, snp.alt), ())
-
-    def __iter__(self):
-        'generate all snps matching filter criteria'
-        for snp in self.snps:
-            if eval(self.filterExpr):
-                yield snp
 
 
 class TagDict(dict):
-    'keys are tags, values are ReplicateSet objects'
-    def __init__(self, tagDict, containerClass=SNPSet):
+    'keys are tags, values are lists of SNPs'
+    def __init__(self, tagDict, filterFunc=filter_snp_file):
         dict.__init__(self)
         d = {}
         for tag,args in tagDict.items():
-            self[tag] = containerClass(*args)
+            snps = list(filterFunc(*args))
+            for snp in snps:
+                snp.tag = tag # mark each snp based on library it was found in
+            self[tag] = snps
 
     def get_snps(self):
-        'get all filtered SNPs sorted in ascending positional order'
+        'get filtered SNPs from all tags sorted in ascending positional order'
         l = []
-        for tag, rs in self.items():
-            for snp in rs:
-                l.append((snp.pos, tag, snp))
-        l.sort()
+        for tag, snps in self.items():
+            l += snps
+        l.sort(lambda x,y: cmp(x.pos, y.pos)) # sort by ascending position
         return l
 
 
@@ -202,7 +193,7 @@ def read_replicate_files(tagFiles, tagfunc=get_filestem,
         tag = tagfunc(tagFile)
         repFiles = replicatefunc(tag)
         d[tag] = (tagFile, repFiles) + args
-    return TagDict(d, containerClass=ReplicateSet)
+    return TagDict(d, filter_snp_repfiles)
 
 
 def read_vcf_singleton(vcfFile):
@@ -248,63 +239,78 @@ def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
     return annodb, al, genome[seqID]
 
 
-class GeneSNPDict(dict):
-    def __init__(self, tagDict, annodb, al, dna, count_syn=False):
-        dict.__init__(self)
-        self.tagDict = tagDict
-        self.annodb = annodb
-        self.al = al
-        self.dna = dna
-        self.nAT = self.nGC = weight = 0
-        rc = dict(A='T', C='G', G='C', T='A')
-        for pos, tag, snp in tagDict.get_snps():
-            try:
-                geneSNP = al[dna[pos - 1:pos]].keys()[0]
-            except IndexError:
-                pass
-            else:
-                if geneSNP.orientation < 0:
-                    geneSNP = -geneSNP
-                gene = geneSNP.id
-                ipos = geneSNP.start % 3
-                codonStart = geneSNP.start - ipos
-                codon = str(geneSNP.path.sequence[codonStart:codonStart + 3])
-                b = snp.alt # substitution letter
-                if geneSNP.sequence.orientation < 0: # must complement
-                    b = rc[b.upper()]
-                codonAlt = codon[:ipos] + b + codon[ipos + 1:]
-                snp.aaRef = sequtil.translate_orf(codon)
-                snp.aaAlt = sequtil.translate_orf(codonAlt)
-                if count_syn or snp.aaRef != snp.aaAlt: # count this SNP
-                    weight = 1
-                    self.setdefault(gene, []).append((tag,snp))
-                else:
-                    weight = 0
-            if snp.ref in 'GCgc':
-                self.nGC += weight
-            else:
-                self.nAT += weight
-
-    def get_scores(self, gcTotal=None, atTotal=None, geneGCDict=None,
-                   useBonferroni=True):
-        'will use pre-computed GC/AT count data if you provide it'
-        if useBonferroni:
-            correction = len(self)
+def map_snps(snps, annodb, al, dna):
+    'get dict of {gene:[snp1, snp2, ...]}'
+    d = {}
+    for snp in snps:
+        try:
+            geneSNP = al[dna[snp.pos - 1:snp.pos]].keys()[0]
+        except IndexError:
+            pass
         else:
-            correction = 1.
-        if gcTotal is None:
-            gcTotal, atTotal = calc_gc(str(self.dna))
-        results = []
-        for k, v in self.items():
-            if geneGCDict:
-                gcLen, atLen = geneGCDict[k]
+            if geneSNP.orientation < 0:
+                geneSNP = -geneSNP
+            gene = geneSNP.id
+            snp.geneSNP = geneSNP # record its position in the gene
+            d.setdefault(gene, []).append(snp)
+    return d
+
+rcDict = dict(A='T', C='G', G='C', T='A')
+
+def is_nonsyn(snp):
+    'test whether snp is non-synonymous, assuming frame 0 CDS annotation'
+    geneSNP = snp.geneSNP
+    ipos = geneSNP.start % 3
+    codonStart = geneSNP.start - ipos
+    codon = str(geneSNP.path.sequence[codonStart:codonStart + 3])
+    b = snp.alt # substitution letter
+    if geneSNP.sequence.orientation < 0: # must complement
+        b = rcDict[b.upper()]
+    codonAlt = codon[:ipos] + b + codon[ipos + 1:]
+    snp.aaRef = sequtil.translate_orf(codon)
+    snp.aaAlt = sequtil.translate_orf(codonAlt)
+    return snp.aaRef != snp.aaAlt
+        
+def filter_nonsyn(geneSNPdict):
+    'filter gene snps to just non-synonymous subset'
+    d = {}
+    for gene,snps in geneSNPdict.items():
+        snps = filter(is_nonsyn, snps)
+        if snps: # only save non-empty list
+            d[gene] = snps
+    return d
+
+
+def score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None,
+                       geneGCDict=None, useBonferroni=True, dnaseq=None,
+                       annodb=None):
+    'will use pre-computed GC/AT count data if you provide it'
+    if useBonferroni:
+        correction = len(geneSNPdict)
+    else:
+        correction = 1.
+    if gcTotal is None:
+        gcTotal, atTotal = calc_gc(str(dnaseq))
+    results = []
+    nGC = nAT = 0
+    for snps in geneSNPdict.values(): # get GC vs AT count totals
+        for snp in snps:
+            if snp.ref in 'GCgc':
+                nGC += 1
             else:
-                gcLen, atLen = calc_gene_gc(self.annodb, k)
-            pois = stats.poisson(self.nGC * float(gcLen) / gcTotal +
-                                 self.nAT * float(atLen) / atTotal)
-            results.append((correction * pois.sf(len(v) - 1), k))
-        results.sort()
-        return results
+                nAT += 1
+
+    for k, v in geneSNPdict.items():
+        if geneGCDict:
+            gcLen, atLen = geneGCDict[k]
+        else:
+            gcLen, atLen = calc_gene_gc(annodb, k)
+        pois = stats.poisson(nGC * float(gcLen) / gcTotal +
+                             nAT * float(atLen) / atTotal)
+        results.append((correction * pois.sf(len(v) - 1), k))
+    results.sort()
+    return results
+
 
 def calc_gc(s):
     'calc GC and AT counts in string s'
@@ -346,8 +352,8 @@ def generate_subsets(tagFiles, annodb, al, dna, nbest=None, *args):
         l = [tagFile for (j, tagFile) in enumerate(tagFiles)
              if i & pow(2, j)]
         tagDict = read_tag_files(l, *args)
-        gsd = GeneSNPDict(tagDict, annodb, al, dna)
-        results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
+        results = analyze_nonsyn(tagDict, annodb, al, dna,
+                                 gcTotal, atTotal, geneGCDict)
         d[tuple([s.split('.')[0] for s in l])] = results[:nbest]
     return d
 
@@ -365,8 +371,8 @@ def process_pools(poolFiles, annodb, al, dna, tagFunc=get_pool_tags,
     gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
     for poolFile in poolFiles:
         tagDict = read_vcf_singleton(poolFile)
-        gsd = GeneSNPDict(tagDict, annodb, al, dna)
-        results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
+        results = analyze_nonsyn(tagDict, annodb, al, dna,
+                                 gcTotal, atTotal, geneGCDict)
         d[tagFunc(poolFile)] = results[:nbest]
     return d
 
@@ -402,12 +408,18 @@ def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
             print 'analyzing', pfiles
             tagDict = read_tag_files(pfiles, tagfunc, replicatefunc,
                                      minRep, *args)
-            gsd = GeneSNPDict(tagDict, annodb, al, dna)
-            results = gsd.get_scores(gcTotal, atTotal, geneGCDict)
+            results = analyze_nonsyn(tagDict, annodb, al, dna,
+                                     gcTotal, atTotal, geneGCDict)
             k = reduce(lambda x,y:x + y, [get_pool_tags(t) for t in pfiles])
             d[k] = results[:nbest]
     return d
 
+def analyze_nonsyn(tagDict, annodb, al, dna, gcTotal=None, atTotal=None,
+                   geneGCDict=None):
+    gsd = map_snps(tagDict.get_snps(), annodb, al, dna)
+    gsd = filter_nonsyn(gsd)
+    return score_genes_pooled(gsd, gcTotal, atTotal, geneGCDict,
+                              dnaseq=dna, annodb=annodb)
 
 if __name__ == '__main__':
     print 'reading gene annotations from', sys.argv[1]
@@ -415,8 +427,7 @@ if __name__ == '__main__':
     tagFiles = sys.argv[2:]
     print 'reading tag files:', tagFiles
     tagDict = read_tag_files(tagFiles)
-    gsd = GeneSNPDict(tagDict, annodb, al, dna)
     print 'scoring genes...'
-    results = gsd.get_scores()
+    results = analyze_nonsyn(tagDict, annodb, al, dna)
     print 'top 20 hits:', results[:20]
     
