@@ -27,6 +27,10 @@ top 20 hits: [(6.6292398002665553e-23, 'acrB'), (9.5886861652296713e-09, 'marC')
 
 '''
 
+
+#######################################################################
+# VCF reading functions and SNP object class
+
 def convert_number(s):
     'convert string to number if possible'
     if not s[0].isdigit():
@@ -93,34 +97,11 @@ def read_vcf(path, vcffields=('CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL',
     ifile.close()
     return l
 
-def npool_posterior(snps, npools=(3,4)):
-    'assess likelihood of data under different pooling factors'
-    logP = [0.] * len(npools)
-    for snp in snps:
-        for i,npool in enumerate(npools):
-            pmf = stats.binom(sum(snp.dp4), 1. / npool)
-            logP[i] += log(pmf.pmf(sum(snp.dp4[2:])))
-    return logP
 
-def basic_snp_filter(snp):
-    return snp.qual >= 99 and snp.af1 <= 0.5
 
-def get_binom_cutoff(c, p, s, nmax=1):
-    'find minimal cutoff that gives at most nmax false positives per genome'
-    pmf = stats.binom(c, p)
-    l = 0
-    r = c
-    while r > l + 1:
-        mid = (l + r) / 2
-        if pmf.sf(mid - 1) * s > nmax:
-            l = mid
-        else:
-            r = mid
-    return r
 
-def binom_filter(snp, p=0.01, s=4e+06):
-    'return True if snp passes sequencing error cutoff'
-    return snp.nalt >= get_binom_cutoff(snp.nreads, p, s)
+#######################################################################
+# snp false positive filtering functions
 
 def filter_snp_file(vcfFile,
                     filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90'):
@@ -149,6 +130,10 @@ def filter_snp_repfiles(mergedFile, replicateFiles,
             yield snp
 
 
+
+
+#######################################################################
+# utilities for processing multiple tagged libraries
 
 class TagDict(dict):
     'keys are tags, values are lists of SNPs'
@@ -202,6 +187,12 @@ def read_vcf_singleton(vcfFile):
     return TagDict(d)
 
 
+
+
+
+#######################################################################
+# gene annotation reading and basic composition analysis functions
+
 def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
     'construct annotation DB for gene coding regions in a genome'
     try:
@@ -238,9 +229,45 @@ def read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
     al.build()
     return annodb, al, genome[seqID]
 
+def calc_gc(s):
+    'calc GC and AT counts in string s'
+    s = s.upper()
+    gcTotal = s.count('G') + s.count('C')
+    atTotal = len(s) - gcTotal
+    return gcTotal, atTotal
+
+def calc_gene_gc(annodb, geneID):
+    'get GC, AT counts for specified gene'
+    ann = annodb[geneID]
+    return calc_gc(str(ann.sequence))
+
+
+def get_gc_totals(annodb, dna):
+    'get GC/AT counts for whole genome and for individual genes in annodb'
+    gcTotal, atTotal = calc_gc(str(dna))
+    geneGCDict = {}
+    for geneID in annodb:
+        geneGCDict[geneID] = calc_gene_gc(annodb, geneID)
+    return gcTotal, atTotal, geneGCDict
+
+
+def gc_gene_sizes(annodb, dna, gcBias=36.):
+    'return GC-bias weighted sizes for whole genome and each gene'
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    total = gcTotal * gcBias + atTotal 
+    l = []
+    for gc, at in geneGCDict.values():
+        l.append(gc * gcBias + at)
+    return total, l
+
+
+
+
+#######################################################################
+# snp mapping and impact filtering functions
 
 def map_snps(snps, annodb, al, dna):
-    'get dict of {gene:[snp1, snp2, ...]}'
+    'map snps to genes, returning dict of {gene:[snp1, snp2, ...]}'
     d = {}
     for snp in snps:
         try:
@@ -281,6 +308,10 @@ def filter_nonsyn(geneSNPdict):
     return d
 
 
+
+#######################################################################
+# gene scoring functions
+
 def score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None,
                        geneGCDict=None, useBonferroni=True, dnaseq=None,
                        annodb=None):
@@ -312,36 +343,11 @@ def score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None,
     return results
 
 
-def calc_gc(s):
-    'calc GC and AT counts in string s'
-    s = s.upper()
-    gcTotal = s.count('G') + s.count('C')
-    atTotal = len(s) - gcTotal
-    return gcTotal, atTotal
 
-def calc_gene_gc(annodb, geneID):
-    'get GC, AT counts for specified gene'
-    ann = annodb[geneID]
-    return calc_gc(str(ann.sequence))
-
-
-def get_gc_totals(annodb, dna):
-    'get GC/AT counts for whole genome and for individual genes in annodb'
-    gcTotal, atTotal = calc_gc(str(dna))
-    geneGCDict = {}
-    for geneID in annodb:
-        geneGCDict[geneID] = calc_gene_gc(annodb, geneID)
-    return gcTotal, atTotal, geneGCDict
-
-
-def gc_gene_sizes(annodb, dna, gcBias=36.):
-    'return GC-bias weighted sizes for whole genome and each gene'
-    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
-    total = gcTotal * gcBias + atTotal 
-    l = []
-    for gc, at in geneGCDict.values():
-        l.append(gc * gcBias + at)
-    return total, l
+#######################################################################
+# sub-experiment analysis utilities
+# for generating subsets of the experimental data and analyzing
+# results that would be obtained from those subsets.
 
 def generate_subsets(tagFiles, annodb, al, dna, nbest=None, *args):
     'generate results from all possible subsets of tagFiles'
@@ -414,8 +420,14 @@ def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
             d[k] = results[:nbest]
     return d
 
+
+
+#######################################################################
+# simple examples of how to run a complete analysis
+
 def analyze_nonsyn(tagDict, annodb, al, dna, gcTotal=None, atTotal=None,
                    geneGCDict=None):
+    'scores genes based on non-synonymous SNPs only'
     gsd = map_snps(tagDict.get_snps(), annodb, al, dna)
     gsd = filter_nonsyn(gsd)
     return score_genes_pooled(gsd, gcTotal, atTotal, geneGCDict,
