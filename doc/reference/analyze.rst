@@ -8,32 +8,38 @@ Phenoseq Data Analysis Classes and Functions
 .. moduleauthor:: Christopher Lee <leec@chem.ucla.edu>
 .. sectionauthor:: Christopher Lee <leec@chem.ucla.edu>
 
-Convenience Classes
--------------------
 
-* :class:`TagDict` represents a total SNP dataset for an entire set
-  of mutant strains, typically constructed from datasets for multiple
-  tagged libraries.  Its :meth:`TagDict.get_snps` method provides
-  a convenient way to iterate over all the :class:`SNP` objects in ascending
-  positional order.
+Overview
+--------
 
-* :class:`GeneSNPDict` represents the mapping of a :class:`TagDict` 
-  variant dataset onto a set of genes.  Its :meth:`GeneSNPDict.get_scores`
-  method provides a convenient way to get phenotype sequencing scores
-  for each gene.
+The **analyze** module provides functions for
+
+* reading SNP datasets and gene annotation data;
+* filtering SNPs to remove false positives or based on impact criteria
+  (e.g. non-synonymous mutations only).
+* mapping SNPs to genes in a variety of ways.
+* scoring genes to identify the likely causes of the phenotype.
+
+These functions use just a few standard "interfaces" to pass data:
+
+* SNP datasets are simply passed as lists of :class:`SNP` objects, each with
+  attributes describing its location, etc.
+
+* gene:SNP mappings are passed as a dictionary whose keys are gene IDs,
+  and whose associated values are the lists of SNPs in each gene.
+
 
 A simple example of using this module to score a set of genes
 as potential causes of a phenotype::
 
     from phenoseq import analyze
     print 'reading gene annotations from', sys.argv[1]
-    annodb, al, dna = analyze.read_genome_annots(sys.argv[1])
+    annodb, al, dna = analyze.read_genbank_annots(sys.argv[1])
     tagFiles = sys.argv[2:]
     print 'reading tag files:', tagFiles
-    tagDict = analyze.read_tag_files(tagFiles)
-    gsd = analyze.GeneSNPDict(tagDict, annodb, al, dna)
+    snps = analyze.read_tag_files(tagFiles)
     print 'scoring genes...'
-    results = gsd.get_scores()
+    results = analyze.analyze_nonsyn(snps, annodb, al, dna)
     print 'top 20 hits:', results[:20]
 
 
@@ -41,7 +47,10 @@ as potential causes of a phenotype::
 Convenience Functions
 ---------------------
 
-.. function:: read_vcf(path, **kwargs)
+Data Reading Functions
+......................
+
+.. function:: read_vcf(path, vcffields=('CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT'), **kwargs)
 
    Reads a VCF file from *path*
    and returns a list of :class:`SNP` objects, with
@@ -51,39 +60,43 @@ Convenience Functions
 
    Optional *kwargs* are passed directly to the :class:`SNP` constructor. 
 
-.. function:: read_tag_files(tagFiles, tagfunc=get_filestem, replicatefunc=get_replicate_files, *args)
+.. function:: read_tag_files(tagFiles, tagfunc=get_filestem, filterFunc=filter_snps, replicatefunc=None, add_attrs=add_snp_attrs, *args, **kwargs)
 
-   Constructs and returns a :class:`TagDict` for a set of tags,
-   each with replicate datasets.
+   Merges SNPs from multiple library files, returning a list of 
+   :class:`SNP` objects each with a ``tag`` attribute representing the
+   specific library it was observed in.  Each tag could correspond to 
+   a single sample, or to a pool of multiple samples depending on your
+   experimental design.
 
    *tagFiles*: a list of VCF files each representing a SNP dataset for
-   one tag.
+   one tag (library).
 
    *tagfunc*: a function that takes a tag file path and returns a tag ID.
 
+   *filterFunc*: a generator function that takes a set of SNPs and
+   generates the subset that pass some desired criteria.  Can be 
+   set to ``None``.
+
    *replicatefunc*: a function that takes a tag ID and returns a list
    of VCF file paths representing the replicate datasets for that
-   tag.
+   tag.  If you specify this, you should also set
+   ``filterFunc=analyze.filter_snps_repfiles`` to make it filter
+   the SNPs using the replicate datasets.
+
+   *add_attrs*: a function that adds attributes to each
+   :class:`SNP` object.  Can be set to ``None``.
 
    *args*: optional additional arguments to be passed to the
-   :class:`ReplicateSet` constructor for each tagID.
+   ``filterFunc`` filter function for filtering SNPs.
 
-.. function:: read_vcf_singleton(vcfFile)
+   *kwargs*: optional arguments to be passed to the :func:`read_vcf`
+   function for reading each library file.
 
-   Constructs and returns a :class:`TagDict` for a single VCF file.
-
-.. function:: read_genome_annots(gbfile, fastafile=None, iseq=0, featureType='CDS')
+.. function:: read_genbank_annots(gbfile, fastafile=None, iseq=0, featureType='CDS')
 
    Constructs a (gene) annotation database from a Genbank genome file.
-   Returns three values: 
-
-   * an annotation database
-
-   * an alignment container storing the alignment of the annotations to
-     the genome sequence.
-
-   * the genome sequence object.
-
+   NB: this assumes each gene consists of **one** interval.
+   This cannot be used for multi-exon genes!
    It takes the following arguments:
 
    *gbfile* must be a path to a Genbank format file containing
@@ -100,8 +113,184 @@ Convenience Functions
    constructing annotations.  By default, it extracts the coding sequence
    regions.
 
+   Returns three values: 
+
+   * an annotation database
+
+   * an alignment container storing the alignment of the annotations to
+     the genome sequence.
+
+   * the genome sequence object.
+
    **note**: this function requires both the BioPython ``SeqIO`` module,
    and the Pygr ``seqdb`` and ``annotation`` modules.
+
+.. function:: read_exon_annots(genome, genesFile='knownGene.txt')
+
+   Constructs a (gene) annotation database from a UCSC knownGene
+   transcript set.  It builds an exon annotation database from this
+   transcript set, and merges transcripts that share a common exon
+   into a single gene.  This mapping is suitable for use with 
+   multi-exon genes.
+
+   *genome* must be dictionary-like object that maps sequence IDs to
+   sequence objects.
+
+   *genesFile*: the path to the UCSC knownGene text file.  The coordinates
+   in this file must be valid for use on the specified *genome*.
+
+   Returns:
+
+   * an annotation database
+
+   * an alignment container storing the alignment of the annotations to
+     the genome sequence.
+
+   * a dictionary mapping exon annotation ID values to gene ID values.
+
+   * the total size of the annotated exome.
+
+   * a dictionary mapping gene ID values to their associated maximum
+     transcript length.  This gives the effective target size of each
+     gene in the exome.
+
+   **note**: this function requires the Pygr ``seqdb`` and ``annotation`` modules.
+
+SNP false-positive filtering functions
+......................................
+
+These take a list of SNPs as input, and generate a subset of the SNPs
+that pass some specified criteria.
+
+.. function:: filter_snps(snps, filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90')
+
+   *snps*: a list of :class:`SNP` objects.
+
+   *filterExpr*: a valid Python expression to be evaluated for each SNP.
+   The SNP passes the filter if the expression is True.
+
+.. function:: filter_snps_repfiles(snps, replicateFiles, filterExpr='snp.af1 <= 0.5 and len(get_replicates(snp)) >= 2')
+
+   *snps*: a list of :class:`SNP` objects.
+
+   *repFiles*: a list of VCF files representing replicate lanes to be
+   used for testing whether the SNP replicated adequately.
+
+   *filterExpr*: a valid Python expression to be evaluated for each SNP.
+   The SNP passes the filter if the expression is True.
+
+
+SNP - Gene mapping functions
+............................
+
+.. function:: map_snps(snps, al, genome, exonGene)
+
+   Maps SNPs to genes using the specified alignment to exon annotations,
+   and the exon to gene mapping given by *exonGene*.  This function is
+   suitable for multi-exon gene data read by :func:`read_exon_annots`.
+   Returns a gene:snps dictionary.
+
+   *snps*: a list of :class:`SNP` objects.
+
+   *al*: an alignment of genome sequence intervals to exon annotations.
+
+   *genome*: the genome on which the exon annotations are aligned.
+
+   *exonGene*: a dictionary whose keys are exon annotation IDs, 
+   and whose associated values are gene IDs.
+
+.. function:: map_snps_chrom1(snps, al, dna)
+
+   Maps SNPs to genes on a single chromosome.  This function is suitable
+   for single-interval gene data read by :func:`read_genbank_annots`.
+   Returns a gene:snps dictionary.
+
+   *snps*: a list of :class:`SNP` objects.
+
+   *al*: an alignment of genome sequence intervals to exon annotations.
+
+   *dna*: the chromosome sequence object on which the exon annotations are aligned.
+
+
+SNP Impact filtering functions
+..............................
+
+.. function:: filter_nonsyn(geneSNPdict)
+
+   Filters gene SNPs to just the subset that are non-synonymous.
+   *geneSNPdict* should be a gene:snp dict from :func:`map_snps_chrom1`.
+   Returns a filtered gene:snp dictionary.
+
+
+Gene Scoring functions
+......................
+
+.. function:: score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None, geneGCDict=None, useBonferroni=True, dnaseq=None, annodb=None)
+
+   Scores genes based on Poisson p-value for the total number of hits
+   in each gene.  This is suitable for data where multiple samples were
+   pooled in each library (making it impossible to tell which SNPs occurred
+   in exactly which sample).
+
+   *geneSNPdict* should be a gene:snp dict.
+
+   *gcTotal,atTotal,geneGCDict* should be GC/AT base counts generated by
+   :func:`get_gc_totals`.  These are optional: the function will compute
+   them itself if they are not provided.
+
+   *gcTotal*: if not None, the count of G and C bases in the genome
+   sequence.  If None, it and *atTotal* are automatically calculated from the
+   *dna* sequence passed to the constructor.
+
+   *atTotal*: the count of A and T bases in the genome sequence.
+
+   *geneGCDict*: if not None, must be a dictionary whose keys are
+   geneIDs, and whose associated values are tuples giving
+   ``(gcTotal, atTotal)`` specifically for each gene.  If None,
+   the values are calculated automatically from the *annodb*
+   passed to the constructor.
+
+   *useBonferroni=True* forces the function to multiply the p-values
+   by the total number of genes being tested.
+
+   *dnaseq* is used to compute GC/AT base count totals if not provided 
+   (see above).
+
+   *annodb* is used to compute GC/AT base counts for each gene if not
+   provided (see above).
+
+   Returns a sorted list of ``(p_value, geneID)`` giving the 
+   phenotype sequencing scores for all genes in which SNPs were reported.
+   Since *smallest* p-values are the most significant, the top hits
+   are at the *beginning* of this list.  The score calculations
+   are described in :doc:`/theory`.
+
+.. function:: score_genes(geneSNPdict, nsample, totalSize, geneLengths, useBonferroni=True)
+
+   Scores genes based on the number of samples in which each gene was
+   hit.  This is suitable for unpooled data, where each library contains
+   only one sample.
+
+   *geneSNPdict* should be a gene:snp dict.
+
+   *nsample* should be the total number of samples.
+
+   *totalSize* should represent the total size (in nucleotides) of the
+   exome being analyzed.
+
+   *geneLengths* should be a dictionary whose keys are gene IDs, and
+   whose values are the size (in nucleotides) of that gene's exonic region
+   (its effective target size for this analysis).
+
+   *useBonferroni=True* forces the function to multiply the p-values
+   by the total number of genes being tested.
+
+   Returns a sorted list of ``(p_value, geneID)`` giving the 
+   phenotype sequencing scores for all genes in which SNPs were reported.
+   Since *smallest* p-values are the most significant, the top hits
+   are at the *beginning* of this list.  The score calculations
+   are described in :doc:`/theory`.
+
 
 SNP Dataset Classes
 -------------------
@@ -126,144 +315,4 @@ The SNP object
 
    * *kwargs*: optional key=value pairs to bind as additional attributes
      for this SNP object.
-
-.. class:: SNPSet(vcfFile, filterExpr='snp.af1 <= 0.5 and getattr(snp, "pv4", (0.,))[0] >= 0.01 and snp.qual > 90')
-
-   A convenience class for reading data from a VCF file representing a sample.
-
-   *vcfFile*: a VCF file path containing merged SNP data
-
-   *filterExpr* must be a string containing a valid Python expression.
-   If this expression evaluates True, then the SNP will be reported,
-   otherwise it will not be reported.  This expression has access
-   to global and local variables, principally the *snp* object
-   representing the SNP currently being assessed.  Note that the 
-   default filter requires that the SNP be called as 50% or less
-   of the sample, that it not show strong evidence of strand-bias
-   as indicated by the PV4 strand-bias p-value, and that its reported
-   quality be above 90.
-
-.. method:: SNPSet.__iter__()
-
-   Iterate over all :class:`SNP` objects that pass the above criteria.
-
-
-Comparing data from replicate runs
-..................................
-
-.. class:: ReplicateSet(mergedFile, replicateFiles, filterExpr='snp.af1 <= 0.5 and len(self[snp]) >= 2')
-
-   A convenience class for reading data for two or more replicate
-   SNP datasets.
-
-   *mergedFile*: a VCF file path containing merged SNP data from all the 
-   replicate datasets.
-
-   *replicateFiles*: a list of file paths representing each of the 
-   replicate SNP datasets, each in VCF format.
-
-   *filterExpr* must be a string containing a valid Python expression.
-   If this expression evaluates True, then the SNP will be reported,
-   otherwise it will not be reported.  This expression has access
-   to global and local variables, principally the *snp* object
-   representing the SNP currently being assessed.  Note that the 
-   default filter requires that the SNP be called as 50% or less
-   of the sample, and that it was found independently in at least
-   two of the replicate datasets.
-
-.. method:: ReplicateSet.__iter__()
-
-   Iterate over all :class:`SNP` objects that pass the above criteria.
-
-.. method:: ReplicateSet.__getitem__(snp)
-
-   The *snp*: key must be a :class:`SNP` object returned by the iterator.
-   Its associated value is a list of the corresponding :class:`SNP` objects
-   found in the replicate datasets (or an empty tuple if none).
-
-Union of SNP data from multiple tagged libraries
-................................................
-
-.. class:: TagDict(tagDict)
-
-   *tagDict* must be a dictionary whose keys are tag IDs (typically
-   the six nucleotide tag sequence itself), and whose associated
-   values are lists of arguments for constructing a :class:`ReplicateSet`
-   for that tag.
-
-   The resulting :class:`TagDict` object is itself a dictionary, whose
-   keys are tag IDs, and whose associated values are :class:`ReplicateSet`
-   objects represent the SNP data for that specific tag.
-
-.. method:: TagDict.get_snps()
-
-   Returns a list of all filtered SNPs (from all tags), sorted in ascending
-   positional order.  Specifically, it is a list of tuples, each consisting
-   of three values: ``(snp_pos, tag, snp)``, where ``snp_pos`` is the 
-   nucleotide position of the SNP, ``tag`` is the tagID of the dataset
-   it was observed in, and ``snp`` is the :class:`SNP` object providing
-   all the SNP's attributes.
-
-   Note that if the same variant is observed in different tag datasets,
-   it will be reported once for each of those tag datasets.
-
-Gene to SNP mapping and scoring
-...............................
-
-.. class:: GeneSNPDict(tagDict, annodb, al, dna, count_syn=False)
-
-   Stores a mapping of SNPs to genes, filters them for non-synonymous
-   substitutions, and returns gene scores based on the density
-   of SNP hits within each gene.  It acts as a dictionary
-   whose keys are gene IDs, and whose associated values are
-   lists of SNPs found in that gene.  Each reported SNP in a gene
-   is represented by a tuple of the form ``(tagID, snp)``, where
-   the ``tagID`` indicates the library in which the SNP was reported,
-   and ``snp`` is a :class:`SNP` object describing the SNP.
-
-   It takes the following arguments:
-
-   *tagDict*: a :class:`TagDict` representing the set of all variants
-   found in all mutant strains.
-
-   *annodb*: an annotation database representing the set of genes
-   in the genome, specifically their coding regions.  *annodb*
-   must be a dictionary whose keys are gene IDs, and whose associated
-   value is a sequence interval representing the coding region.
-   Typically this is obtained from :func:`read_genome_annots`.
-
-   *al*: an alignment of the genes to the genome.
-   Typically this is obtained from :func:`read_genome_annots`.
-
-   *dna*: the genome sequence on which the annotations (and alignment)
-   are mapped.
-   Typically this is obtained from :func:`read_genome_annots`.
-
-   *count_syn*: if True, includes synonymous mutations in the 
-   analysis.  By default they are excluded from the analysis.
-
-.. method:: GeneSNPDict.get_scores(gcTotal=None, atTotal=None, geneGCDict=None, useBonferroni=True)
-
-   Returns a sorted list of ``(p_value, geneID)`` giving the 
-   phenotype sequencing scores for all genes in which SNPs were reported.
-   Since *smallest* p-values are the most significant, the top hits
-   are at the *beginning* of this list.  The score calculations
-   are described in :doc:`/theory`.
-
-   *gcTotal*: if not None, the count of G and C bases in the genome
-   sequence.  If None, it and *atTotal* are automatically calculated from the
-   *dna* sequence passed to the constructor.
-
-   *atTotal*: the count of A and T bases in the genome sequence.
-
-   *geneGCDict*: if not None, must be a dictionary whose keys are
-   geneIDs, and whose associated values are tuples giving
-   ``(gcTotal, atTotal)`` specifically for each gene.  If None,
-   the values are calculated automatically from the *annodb*
-   passed to the constructor.
-
-   *useBonferroni*: if True, all p-values are multiplied by the
-   total number of genes being tested (i.e. the number of genes
-   in which SNPs were reported).  Otherwise, no such correction
-   is performed.
 
