@@ -193,7 +193,7 @@ that pass some specified criteria.
 
    *snps*: a list of :class:`SNP` objects.
 
-   *repFiles*: a list of VCF files representing replicate lanes to be
+   *replicateFiles*: a list of VCF files representing replicate lanes to be
    used for testing whether the SNP replicated adequately.
 
    *filterExpr*: a valid Python expression to be evaluated for each SNP.
@@ -227,9 +227,9 @@ SNP - Gene mapping functions
 
    *snps*: a list of :class:`SNP` objects.
 
-   *al*: an alignment of genome sequence intervals to exon annotations.
+   *al*: an alignment of genome sequence intervals to gene annotations.
 
-   *dna*: the chromosome sequence object on which the exon annotations are aligned.
+   *dna*: the chromosome sequence object on which the gene annotations are aligned.
 
 
 SNP Impact filtering functions
@@ -260,7 +260,7 @@ Gene Scoring functions
 
    *gcTotal*: if not None, the count of G and C bases in the genome
    sequence.  If None, it and *atTotal* are automatically calculated from the
-   *dna* sequence passed to the constructor.
+   *dnaseq* sequence object passed to the constructor.
 
    *atTotal*: the count of A and T bases in the genome sequence.
 
