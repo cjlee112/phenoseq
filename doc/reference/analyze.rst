@@ -303,8 +303,8 @@ The SNP object
    A generic object for representing a SNP, simply as a Python
    object with attributes.  It provides no methods.  It is typically
    initialized from VCF data and carries all the VCF information
-   fields as its attributes; attribute names are lower-case.  E.g.
-   to access the AF1 field, use the SNP object's *af1* attribute.
+   fields as its attributes; all-caps attribute names are cast to lower-case.
+   E.g. to access the AF1 field, use the SNP object's *af1* attribute.
 
    * *colnames*: a list of attribute names to use for the data in *fields*
 

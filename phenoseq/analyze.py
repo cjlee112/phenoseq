@@ -44,6 +44,13 @@ def convert_number(s):
         return s
 
 
+def get_attrname(k):
+    'cast all-uppercase attr names to lowercase'
+    if k == k.upper():
+        return k.lower()
+    else:
+        return k
+
 class SNP(object):
     'represent VCF fields as object attributes, properly unpacked'
     def __init__(self, colnames, fields, add_attrs=None, **kwargs):
@@ -58,18 +65,18 @@ class SNP(object):
                         k = s
                         v = None
                         continue
+                    k = get_attrname(k)
                     l = v.split(',')
                     if len(l) > 1:
-                        setattr(self, k.lower(),
-                                [convert_number(x) for x in l])
+                        setattr(self, k, [convert_number(x) for x in l])
                     else:
-                        setattr(self, k.lower(), convert_number(v))
+                        setattr(self, k, convert_number(v))
             elif k == 'FORMAT' and i + 2 <= len(fields):
                 vals = fields[i + 1].split(':')
                 for j,k in enumerate(fields[i].split(':')):
-                    setattr(self, k.lower(), convert_number(vals[j]))
+                    setattr(self, get_attrname(k), convert_number(vals[j]))
             else:
-                setattr(self, k.lower(), convert_number(fields[i]))
+                setattr(self, get_attrname(k), convert_number(fields[i]))
         for k,v in kwargs.items():
             setattr(self, k, v)
         if add_attrs is not None:
