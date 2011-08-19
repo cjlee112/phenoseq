@@ -98,7 +98,7 @@ Initially, the data must be loaded from the processed files. First, the annotate
 
 	>>> from analyze import *
 	>>> annotated_genome_filename = "NC_000913.gbk"
-	>>> annodb, al, dna = read_genome_annots(annotated_genome_filename)
+	>>> annodb, al, dna = read_genbank_annots(annotated_genome_filename)
 
 This might take a couple of minutes on modest hardware. Next, read in the data from the *.vcf files. In Bash, the argument ``[ACGT]*.vcf`` (from above) expands to something like::
 
@@ -108,7 +108,7 @@ This might take a couple of minutes on modest hardware. Next, read in the data f
 depending on your tags. In python, use::
 
 	>>> tag_files = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']                                                
-	>>> tag_dict = read_tag_files(tag_files)
+	>>> snps = read_tag_files(tag_files)
 
 or obtain the list from ``sys.argv`` by passing in the parameters shown above for analyze.py::
 
@@ -130,40 +130,40 @@ or obtain the list from ``sys.argv`` by passing in the parameters shown above fo
 Analyzing Data
 --------------
 
-Use the parsed data to initialize a ``GeneSNPDict``. 
+The result from any SNP reading function such as :func:`analyze.read_vcf`
+or :func:`analyze.read_tag_files` is a list of :class:`analyze.SNP` objects.
+We can inspect the first few::
 
-	>>> gsd = GeneSNPDict(tag_dict, annodb, al, dna)
+        >>> snps[:5]
+        [<SNP chr1:7682394:G:C>, <SNP chr1:23847535:A:G>, ...]
 
-GeneSNPDict has an important boolean parameter ``count_syn`` (default is False) that tells the class to discard synonymous mutations.
+The next step in analysis is to map the SNPs to genes, using the alignment
+object obtained above, which maps sequence intervals to gene CDS intervals.  
+Here's a simple example that assumes all the SNPs map on one DNA sequence 
+(e.g. a microbial genome)::
 
-An instance of GeneSNPDict has as keys coding regions in which mutations were detected, and might have a fairly large number of keys::
+        >>> gsd = map_snps_chrom1(snps, al, dna)
 
-	>>> gsd.keys()
-	['yfjK', 'speF', 'speG', 'speD', 'ybcL', 'ybcM', 'ybcO', 'ybcJ', 'ybcK', 'ybcF', 'nrdR', 'ybcY', 'pgpA', 'ypeA'...
-	>>> len(gsd.keys())
-	1428
+The result is a gene:snp dictionary, whose keys are gene IDs,
+and whose values are lists of SNPs found in that gene::
 
-The values of GeneSNPDict are lists of tuples consisting of a tag and a ``SNP`` object::
+        >>> gsd
+        {'fugA':[<SNP chr1:343652:T:C>], ...}
 
-	>>> key = gsd.keys()[0]
-	>>> gsd[key]
-	[('GCCAAT', <analyze.SNP object at 0xb2aec0c>), ('TGACCA', <analyze.SNP object at 0xb936f6c>)]
+We can filter these results to just nonsynonymous SNPs::
 
-indicating the library that the SNP was found in (via the tag). The associated SNP object provides information about the mutation. For instance, the following attributes indicate the position, quality, original base, new base, and the original amino acid and new amino acid of the codon::
+        >>> gsd = filter_nonsyn(gsd)
 
-	>>> snp = gsd[key][0][1]
-	>>> print snp.pos, snp.qual, snp.ref, snp.alt, snp.aaRef, snp.aaAlt 
-	2760136 99 G A P L
 
 ---------------------
 Scoring Mutations
 ---------------------
 
-GeneSNPDict has a method ``get_scores`` for scoring mutations. Calling this function returns a list of tuples of p-values and genes in ascending order::
+Finally, we score the genes for significant p-values::
 
-	>>> scores = gsd.get_scores()[:20]
-	>>> for score in scores:
-	...     print score
+        >>> scores = score_genes_pooled(gsd, dnaseq=dna, annodb=annodb)
+	>>> for hit in scores:
+	...     print hit
 	... 
 	(6.7585463507686869e-23, 'acrB')
 	(9.6429750487530072e-09, 'marC')
