@@ -47,6 +47,26 @@ as potential causes of a phenotype::
 Convenience Functions
 ---------------------
 
+Complete Analysis Functions
+...........................
+
+.. function:: analyze_nonsyn(snps, annodb, al, dna, gcTotal=None, atTotal=None, geneGCDict=None)
+
+   Filter *snps* to just those that change the amino acid sequence,
+   and score genes annotated in *annodb* / *al* based on the number of
+   nonsynonymous mutations in each gene.  Returns a sorted list of
+   ``(score, gene)`` tuples as returned by :func:`score_genes_pooled`.
+   Suitable for single-interval genes on a genome consisting of 
+   a single chromosome.
+
+.. function:: analyze_monodom(genome, vcfFiles=glob.glob('*.vcf'), genesFile='knownGene.txt')
+
+   Reads multiple SNP files specified by *vcfFiles*, and
+   scores genes annotated in the UCSC knownGene file specified by *genesFile*.
+   Suitable for multi-exon genes on multiple chromosomes contained in *genome*.
+   Returns a sorted list of
+   ``(score, gene)`` tuples as returned by :func:`score_genes`.
+
 Data Reading Functions
 ......................
 
