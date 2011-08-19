@@ -82,6 +82,10 @@ class SNP(object):
         if add_attrs is not None:
             add_attrs(self)
 
+    def __repr__(self):
+        return '<SNP ' + str(self.chrom) + ':' + str(self.pos) + ':' + self.ref \
+            + ':' + self.alt + '>'
+
 
 def add_snp_attrs(self):
     'add convenience attributes for SNP'
