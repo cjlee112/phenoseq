@@ -86,6 +86,13 @@ class SNP(object):
         return '<SNP ' + str(self.chrom) + ':' + str(self.pos) + ':' + self.ref \
             + ':' + self.alt + '>'
 
+    def __hash__(self):
+        return hash((self.chrom, self.pos, self.alt))
+
+    def __cmp__(self, other):
+        return cmp((self.chrom, self.pos, self.alt),
+                   (other.chrom, other.pos, other.alt))
+
 
 def add_snp_attrs(self):
     'add convenience attributes for SNP'
@@ -132,9 +139,9 @@ def filter_snps_repfiles(snps, replicateFiles,
         repSnps = read_vcf(path, add_attrs=add_snp_attrs)
         replicates.append(repSnps)
         for snp in repSnps: # index SNP records from replicate lanes
-            repMap.setdefault((snp.chrom, snp.pos, snp.alt), []).append(snp)
+            repMap.setdefault(snp, []).append(snp)
     def get_replicates(s):
-        return repMap.get((s.chrom, s.pos, s.alt), ())
+        return repMap.get(s, ())
         
     for snp in snps:
         if eval(self.filterExpr):
