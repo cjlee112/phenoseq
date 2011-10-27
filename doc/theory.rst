@@ -58,12 +58,12 @@ a binomial event with probability :math:`\theta=1/\tau`.
 
 .. math:: = \frac{\mu^k}{(e^{\mu\tau}-1)k!}
           \sum_{i=0}^{\infty}{\frac{(\mu\tau(1-\tau^{-1}))^i}{i!}}
-          = \frac{e^{1-1/\tau}\mu^k}{(1-e^{-\mu\tau})k!}
+          = \frac{e^{\mu(\tau-1)}\mu^k}{(e^{\mu\tau}-1)k!}
 
 for :math:`k \ge 1`.
 We have to treat :math:`k=0` as a special case, since :math:`p(h=0)=0`:
 
-.. math:: p(k=0|\mu,\tau) = \frac{e^{\mu\tau(1-1/\tau)} -1}{e^{\mu\tau}-1}
+.. math:: p(k=0|\mu,\tau) = \frac{e^{\mu(\tau-1)} -1}{e^{\mu\tau}-1}
 
 Note that while this is the correct marginal distribution for a single
 target gene, it should *not* be used to simulate real phenotype
