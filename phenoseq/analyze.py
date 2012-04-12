@@ -169,7 +169,7 @@ def read_tag_files(tagFiles, tagfunc=get_filestem, filterFunc=filter_snps,
         if replicatefunc:
             repFiles = replicatefunc(tag)
             snps = list(filterFunc(snps, repFiles, *args))
-        if filterFunc:
+        elif filterFunc:
             snps = list(filterFunc(snps, *args))
         l += snps
     return l
