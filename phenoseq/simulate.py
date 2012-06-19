@@ -2,7 +2,7 @@
 import random
 import numpy
 from scipy import stats
-from math import exp, log
+from math import exp, log, ceil
 
 class HitCountList(object):
     'efficient container for sparse lists, i.e. where many entries are 0'
@@ -383,7 +383,8 @@ def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
     return yieldMax, cutoff
 
 
-def optimal_npool(nstrain, minFrac=0.98, l=1, r=None, *args, **kwargs):
+def optimal_npool(nstrain, minFrac=0.98, l=1, r=None, totalCov=323,
+                  *args, **kwargs):
     'find maximum npool whose yield >= minFrac * yieldMax'
     yieldMax, i = optimal_yield(nstrain, l, *args, **kwargs) # baseline
     while r is None or r - l > 1:
@@ -391,10 +392,64 @@ def optimal_npool(nstrain, minFrac=0.98, l=1, r=None, *args, **kwargs):
             m = 2 * l
         else: # midpoint of interval
             m = (l + r) / 2
-        y, i = optimal_yield(nstrain, npool=m, *args, **kwargs)
+        nlib = int(ceil(float(nstrain) / m))
+        c = int(totalCov / nlib)
+        y, i = optimal_yield(nstrain, m, c, *args, **kwargs)
         if y >= yieldMax * minFrac: # still acceptable
             l = m
             yieldLast = y
         else: # beyond acceptable range
             r = m
     return yieldLast, l
+
+
+def get_linear_devs(data):
+    x0, y0 = data[0]
+    w = data[-1][0] - x0
+    h = data[-1][1] - y0
+    a = h / w
+    model = [(y0 + a * (t[0] - x0)) for t in data[1:-1]]
+    return [(t[1] - model[i]) / abs(model[i])
+            for i,t in enumerate(data[1:-1])]
+    
+
+def min_coverage(nstrain, npool, minFrac=0.98, l=10, r=None,
+                 minData=7, minDev=-0.1, minDevFrac=0.8, *args, **kwargs):
+    'find minimum coverage whose yield >= minFrac * yieldMax'
+    yieldMax, i = optimal_yield(nstrain, 1, *args, **kwargs) # baseline
+    points = []
+    while r is None or r - l > 1:
+        if r is None: # expand upper bound
+            m = 2 * l
+        else: # midpoint of interval
+            m = (l + r) / 2
+        y, i = optimal_yield(nstrain, npool, m, *args, **kwargs)
+        if y < yieldMax * minFrac: # too low
+            if r is None: # check for convergence
+                points.append((m, log(1. - y / yieldMax))) # log-linear model
+                if len(points) >= minData:
+                    devs = get_linear_devs(points)
+                    count = len([v for v in devs if v < minDev])
+                    if count >= len(devs) * minDevFrac:
+                        print "converged:", points, devs
+                        return y, m
+            l = m
+        else: # high enough
+            r = m
+            yieldLast = y
+    return yieldLast, r
+
+def min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50.,
+             ntarget=5, **kwargs):
+    'find minimum cost protocol for analyzing nstrain mutant strains'
+    l = []
+    for nlib in range(1, nstrain / 2 + 1):
+        if nstrain % nlib == 0:
+            npool = nstrain / nlib
+            hits, cov = min_coverage(nstrain, npool, ntarget=ntarget,
+                                     **kwargs)
+            cost = nlib * libCost + laneCost * nlib * cov / laneCov
+            print nlib, cov, cost
+            l.append((cost, nlib, hits))
+    l.sort()
+    return l[0]
