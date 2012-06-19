@@ -450,6 +450,6 @@ def min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50.,
                                      **kwargs)
             cost = nlib * libCost + laneCost * nlib * cov / laneCov
             print nlib, cov, cost
-            l.append((cost, nlib, hits))
+            l.append((cost, nlib, cov, hits))
     l.sort()
     return l[0]
