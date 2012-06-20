@@ -357,30 +357,58 @@ def optimal_nstrains(ntarget, ngene, nmut=50, n=1000, goal=0.8, r=None):
             l = m
     return r
 
-def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
-                  ntarget=20, ngene=4200, ntotal=4.64e+06, threshold=0.98,
-                  nwait=4, mutFac=3., **kwargs):
-    'find optimal yield by scanning mutation call cutoff values'
-    lam = float(nmut) / ngene
-    genesize = ntotal / ngene
+def find_cutoff(l, r, func):
+    'find v where func(v) switches from False to True'
+    while r is None or r - l > 1:
+        if r is None:
+            m = l * 2
+        else:
+            m = (l + r) / 2
+        if func(m):
+            r = m
+        else:
+            l = m
+    return l
+
+
+def get_yield_params(npool=4, c=75, epsilon=0.01, nmut=50, ngene=4200,
+                     ntotal=4.64e+06, mutFac=3, **kwargs):
     pmfMut = stats.binom(c, (1. - mutFac * epsilon) / npool)
     pmfErr = stats.binom(c, epsilon)
-    for i in range(c):
-        if pmfErr.sf(i) * ntotal < 2 * nmut: # noise starting to fall below signal
-            break
-    yieldMax = cutoff = None
-    while yieldMax is None or yieldLast >= yieldMax * threshold:
+    def no_false_positives(cut):
+        return pmfErr.sf(cut) * ntotal < 0.05
+    i = find_cutoff(0, c, no_false_positives) + 1
+    def too_many_false_negatives(cut):
+        return pmfMut.cdf(cut) * nmut > 0.05
+    j = find_cutoff(0, c, too_many_false_negatives)
+    return pmfMut, pmfErr, i, j
+
+
+def optimal_yield(nstrain, npool=4, c=75, epsilon=0.01, n=1000, nmut=50,
+                  ntarget=20, ngene=4200, ntotal=4.64e+06, **kwargs):
+    'find optimal yield by scanning mutation call cutoff values'
+    pmfMut, pmfErr, i, j = \
+         get_yield_params(npool, c, epsilon, nmut, ngene, ntotal)
+    lam = float(nmut) / ngene
+    genesize = ntotal / ngene
+    if i < j: # well-separated cutoffs, easy to discriminate
+        i = (i + j) / 2 # just point between the two cutoffs
         d = sample_maxhit_rank(n, nstrain, ntarget, ngene, lam,
                                pmfErr.sf(i) * genesize, pmfMut.cdf(i),
                                **kwargs)
-        yieldLast = expectation(d)
-        if yieldMax is None or yieldLast > yieldMax:
-            yieldMax = yieldLast
-            cutoff = i + 1
-        elif cutoff is not None and i - cutoff > nwait:
-            break
-        i += 1
-    return yieldMax, cutoff
+        return expectation(d), i + 1
+    else:
+        l = []
+        for i in range(j, i + 1): # search usable range
+            pFail = pmfMut.cdf(i)
+            d = sample_maxhit_rank(n, nstrain, ntarget, ngene, lam,
+                                   pmfErr.sf(i) * genesize, pFail,
+                                   **kwargs)
+            l.append((expectation(d), i + 1))
+            if pFail > 0.95: # hopeless past this point
+                break
+        l.sort()
+        return l[-1]
 
 
 def optimal_npool(nstrain, minFrac=0.98, l=1, r=None, totalCov=323,
@@ -413,31 +441,25 @@ def get_linear_devs(data):
             for i,t in enumerate(data[1:-1])]
     
 
-def min_coverage(nstrain, npool, minFrac=0.98, l=10, r=None,
-                 minData=7, minDev=-0.1, minDevFrac=0.8, *args, **kwargs):
+def min_coverage(nstrain, npool, minFrac=0.98, l=10,
+                 minSep=5, *args, **kwargs):
     'find minimum coverage whose yield >= minFrac * yieldMax'
-    yieldMax, i = optimal_yield(nstrain, 1, *args, **kwargs) # baseline
-    points = []
-    while r is None or r - l > 1:
-        if r is None: # expand upper bound
-            m = 2 * l
-        else: # midpoint of interval
-            m = (l + r) / 2
-        y, i = optimal_yield(nstrain, npool, m, *args, **kwargs)
-        if y < yieldMax * minFrac: # too low
-            if r is None: # check for convergence
-                points.append((m, log(1. - y / yieldMax))) # log-linear model
-                if len(points) >= minData:
-                    devs = get_linear_devs(points)
-                    count = len([v for v in devs if v < minDev])
-                    if count >= len(devs) * minDevFrac:
-                        print "converged:", points, devs
-                        return y, m
-            l = m
-        else: # high enough
-            r = m
-            yieldLast = y
-    return yieldLast, r
+    def well_separated(cov):
+        pmfMut, pmfErr, i, j = \
+         get_yield_params(npool, cov, **kwargs)
+        return i + minSep < j
+    r = find_cutoff(l, None, well_separated) + 1 # cov w/ good sig-noise sep
+
+    yieldMax, i = optimal_yield(nstrain, npool, r, *args, **kwargs) # baseline
+    holder = [None]
+    def acceptable_yield(c):
+        y, i = optimal_yield(nstrain, npool, c, *args, **kwargs)
+        if y >= yieldMax * minFrac:
+            holder[0] = y # record the yield
+            return True
+    i = find_cutoff(l, r, acceptable_yield) + 1
+    return holder[0], i
+    
 
 def min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50.,
              ntarget=5, **kwargs):
