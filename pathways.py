@@ -73,17 +73,16 @@ def load_func_assoc(filename="16.1/data/func-associations.col"):
             split = line.strip().split('\t')
             #genes = []
             # ID, Name, genes by four letter name. Gene IDs end the list but are not needed.
+            translated_genes = []
             genes = list(sorted([x for x in split[2:] if x.startswith('b')]))
-            for i in range(len(genes)):
-                gene = genes[i]
+            for gene in genes:
                 try:
                     mapped = trans[gene]
-                    genes[i] = mapped
+                    translated_genes.append(mapped)
                 except KeyError:
-                    #print gene
                     pass
             
-            pathway_dict[split[0]] = (split[1], genes)
+            pathway_dict[split[0]] = (split[1], translated_genes)
             #p = Pathway(split[0], split[1], [x for x in split[2:] if len(x) in [3,4]])
             #pathways.append(p)
     return pathway_dict    
@@ -162,7 +161,11 @@ if __name__ == '__main__':
     pathway_counts = count_snps_per_pathway(snp_counts, pathway_dict)
     results = [(float(v) / len(pathway_dict[k][1]),k) for k, v in pathway_counts.items() if len(pathway_dict[k][1])]
     results.sort()
-    for i, (v, k) in enumerate(reversed(results)):
-        if v > 0:
-            print i, v, k, pathway_dict[k][1]
+    #for i, (v, k) in list(enumerate(reversed(results)))[:20]:
+        #if v > 0:
+            #print i, v, k, pathway_dict[k][1]
+    
+    results = analyze_nonsyn_groups(pathway_dict, snps, annodb, al, dna)
+    for k, v in results:
+        print k, v, pathway_dict[v][1]
 

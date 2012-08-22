@@ -424,6 +424,62 @@ def score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None,
     results.sort()
     return results
 
+def score_genes_groups_pooled(gene_groups_dict, geneSNPdict, gcTotal=None, atTotal=None,
+                       geneGCDict=None, useBonferroni=True, dnaseq=None,
+                       annodb=None):
+    '''Uses poisson scoring for pooled library data (i.e. where
+    multiple samples are pooled in each library).
+    Will use pre-computed GC/AT count data if you provide it'''
+    if useBonferroni:
+        correction = len(gene_groups_dict.items())
+    else:
+        correction = 1.
+    if gcTotal is None:
+        gcTotal, atTotal = calc_gc(str(dnaseq))
+    results = []
+    nGC = nAT = 0
+    for snps in geneSNPdict.values(): # get GC vs AT count totals
+        for snp in snps:
+            if snp.ref in 'GCgc':
+                nGC += 1
+            else:
+                nAT += 1
+
+    for group_id in gene_groups_dict.keys():
+        group_genes = gene_groups_dict[group_id][1]
+        gcLen, atLen = 0, 0
+        for gene in group_genes:
+            try:
+                if geneGCDict:
+                    gc, at = geneGCDict[gene]
+                else:
+                    gc, at = calc_gene_gc(annodb, gene)
+                gcLen += gc
+                atLen += at
+            except KeyError:
+                pass
+        # could use a defaultdict here
+        v = 0
+        for gene in group_genes:
+            try:
+                v += len(geneSNPdict[gene])
+            except KeyError:
+                pass
+        if v > 0:
+            pois = stats.poisson(nGC * float(gcLen) / gcTotal +
+                                nAT * float(atLen) / atTotal)
+            results.append((correction * pois.sf(v - 1), group_id))
+
+    #for k, v in geneSNPdict.items():
+        #if geneGCDict:
+            #gcLen, atLen = geneGCDict[k]
+        #else:
+            #gcLen, atLen = calc_gene_gc(annodb, k)
+        #pois = stats.poisson(nGC * float(gcLen) / gcTotal +
+                             #nAT * float(atLen) / atTotal)
+        #results.append((correction * pois.sf(len(v) - 1), k))
+    results.sort()
+    return results
 
 def score_genes(geneSNPdict, nsample, totalSize, geneLengths,
                 useBonferroni=True):
@@ -535,6 +591,14 @@ def analyze_nonsyn(snps, annodb, al, dna, gcTotal=None, atTotal=None,
     gsd = map_snps_chrom1(snps, al, dna)
     gsd = filter_nonsyn(gsd)
     return score_genes_pooled(gsd, gcTotal, atTotal, geneGCDict,
+                              dnaseq=dna, annodb=annodb)
+
+def analyze_nonsyn_groups(groups, snps, annodb, al, dna, gcTotal=None, atTotal=None,
+                   geneGCDict=None):
+    'scores genes based on non-synonymous SNPs only'
+    gsd = map_snps_chrom1(snps, al, dna)
+    gsd = filter_nonsyn(gsd)
+    return score_genes_groups_pooled(groups, gsd, gcTotal, atTotal, geneGCDict,
                               dnaseq=dna, annodb=annodb)
 
 
