@@ -145,14 +145,35 @@ def count_snps_per_pathway(snp_counts, pathway_dict):
                 pass
         pathway_counts[k] = count
     return pathway_counts
+
+def promoter_snps(promoter_offset=500):
+    tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
+    (annodb, al, dna, snps, gsd) = load_data(tagFiles)
+    snp_locs = [snp.pos for snp in snps]
+    results = []
+    for gene in annodb.keys():
+        seq = annodb[gene].sequence
+        if seq.orientation > 0:
+            start = seq.start
+            l = [s for s in snp_locs if (s >= start - promoter_offset) and (s < start)]
+        else:
+            #stop = seq.stop
+            #print seq.start, seq.stop
+            stop = -seq.start
+            l = [s for s in snp_locs if (s > stop) and (s <= stop + promoter_offset)]
+        if len(l) > 0:
+            results.append((gene, len(l)))
+            #print gene, len(l), seq.orientation
+    return results
+    
     
 if __name__ == '__main__':
 
     # First EXP
-    tagFiles = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
+    #tagFiles = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
 
     # Luisa's EXP
-    #tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
+    tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
 
     pathway_dict = load_func_assoc()
         
@@ -166,6 +187,6 @@ if __name__ == '__main__':
             #print i, v, k, pathway_dict[k][1]
     
     results = analyze_nonsyn_groups(pathway_dict, snps, annodb, al, dna)
-    for k, v in results:
-        print k, v, pathway_dict[v][1]
+    for k, v in results[:20]:
+        print "%s %s: %s" % (k, v, ", ".join(pathway_dict[v][1]))
 
