@@ -94,7 +94,7 @@ def load_data(tagFiles, count_syn=True):
     gsd = map_snps_chrom1(snps, al, dna)
     return (annodb, al, dna, snps, gsd)    
 
-def count_snps_per_gene(snps):
+def count_snps_per_gene(snps, al, dna):
     """Counts snps for each gene."""
     rc = dict(A='T', C='G', G='C', T='A')
     snp_counts = {}
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     pathway_dict = load_func_assoc()
         
     (annodb, al, dna, snps, gsd) = load_data(tagFiles)
-    snp_counts = count_snps_per_gene(snps)
+    snp_counts = count_snps_per_gene(snps, al, dna)
     pathway_counts = count_snps_per_pathway(snp_counts, pathway_dict)
     results = [(float(v) / len(pathway_dict[k][1]),k) for k, v in pathway_counts.items() if len(pathway_dict[k][1])]
     results.sort()
