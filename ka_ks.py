@@ -820,7 +820,8 @@ if __name__ == '__main__':
         genes = functional_groups[k][1]
         if len(genes) == 0:
             continue
-        pseudo = len(genes)
+        #pseudo = len(genes)
+        pseudo = 1.
         a, b, c, d = ka_ks_counts_for_gene_group(genes, snp_counts, site_counts, pseudo=pseudo)
         [oddsratio, pvalue, lower, upper] = fisher_test(a, b, c, d)
         if oddsratio > 1 and oddsratio != float("inf"):
