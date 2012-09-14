@@ -24,13 +24,16 @@ if __name__ == '__main__':
     pathway_dict = load_func_assoc()
     top_genes_subset = [y for (x,y) in top_genes[:N]]
     #print top_genes_subset
-
+    results = []
     for name, genes_ in pathway_dict.items():
         genes = genes_[1]
-        #print genes
         num_genes_int_top_list = len([g for g in genes if g in top_genes_subset])
+        
         if num_genes_int_top_list:
-            print p_value(len(genes), num_genes_int_top_list, len(top_genes_subset)), name, len(genes), genes
+            results.append( (len(pathway_dict)*p_value(len(genes), num_genes_int_top_list, len(top_genes_subset)), name, len(genes), genes))
+    results.sort()
+    for r in results:
+        print r
 
     
     
