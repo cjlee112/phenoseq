@@ -2,9 +2,6 @@ from phenoseq.analyze import *
 from math import log, exp, sqrt
 from pathways import count_snps_per_gene, load_data, load_func_assoc
 
-#import numpy
-#from matplotlib import pyplot
-
 from scipy.stats import hypergeom
 
 def phenoseq_top_genes(tagFiles):
@@ -18,7 +15,10 @@ def p_value(num_genes, num_genes_int_top_list, num_top_genes, total_genes=4000):
     return p
 
 if __name__ == '__main__':
-    N=50
+    try:
+        N = int(sys.argv[1])
+    except IndexError:
+        N = 50
     tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
     top_genes = phenoseq_top_genes(tagFiles)
     pathway_dict = load_func_assoc()
@@ -32,8 +32,8 @@ if __name__ == '__main__':
         if num_genes_int_top_list:
             results.append( (len(pathway_dict)*p_value(len(genes), num_genes_int_top_list, len(top_genes_subset)), name, len(genes), genes))
     results.sort()
-    for r in results:
-        print r
+    for p, name, n, genes in results:
+        print ",".join(map(str, [p, name, n, " ".join(genes)]))
 
     
     

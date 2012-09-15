@@ -280,7 +280,6 @@ def ka_ks_counts_for_gene_group(genes, snp_counts, site_counts, pseudo=1.0):
     a,b,c,d = map(lambda x: int(x + pseudo), [Ga, Gs, Na, Ns])
     return a, b, c, d
     
-    
 ## Fisher Exact Test    
 def confidence_interval(a, b, c, d, z=1.65):
     """Confidence interval fo Fisher Exact test."""
@@ -296,7 +295,7 @@ def confidence_interval(a, b, c, d, z=1.65):
     return (exp(l - z * s), exp(1 + z*s))
 
 def fisher_test(a, b, c, d):
-    oddsratio, pvalue = stats.fisher_exact([[a, b], [c, d]])
+    oddsratio, pvalue = stats.fisher_exact([[a, b], [c, d]], alternative='greater')
     lower, upper = confidence_interval(a, b, c, d)
     return pvalue, lower, upper, oddsratio
     # rpy2 version
@@ -310,7 +309,7 @@ def fisher_test(a, b, c, d):
 
 ## Binomial Test
 
-def binomial_test(Ga, Gs, Na, Ns, z=1.96):
+def binomial_test(Ga, Gs, Na, Ns, z=1.65):
     """Returns binomial p-value and Wilson confidence interval."""
     if Gs == 0:
         return None
@@ -325,7 +324,7 @@ def binomial_test(Ga, Gs, Na, Ns, z=1.96):
     lower = (p + 1. /(2*n)*z*z - b) / (1. + 1./n * z * z)
     upper = (p + 1. /(2*n)*z*z + b) / (1. + 1./n * z * z)
     return (pvalue, lower, upper, p, theta)
-
+    
 def perform_tests(gene_groups, snp_counts, site_counts, test_func=fisher_test, pseudo=1.0):
     """Performs Fisher's Exact test for all genes individually."""
     tests = []
@@ -336,26 +335,28 @@ def perform_tests(gene_groups, snp_counts, site_counts, test_func=fisher_test, p
     
 def main(site_counts, snp_counts, genes, functional_groups, test_func=fisher_test):
     ## Genome-wide test
-    genome_test = perform_tests([genes], snp_counts, site_counts, test_func=test_func, pseudo=0.5)
+    genome_test = perform_tests([genes], snp_counts, site_counts, test_func=test_func)
     print "Genome-wide", genome_test[0]
     
     ## Individual tests on gene groups [gene]
     print "Individual gene tests"
-    individual_tests = perform_tests([[gene] for gene in genes], snp_counts, site_counts, test_func=test_func, pseudo=0.5)
+    individual_tests = perform_tests([[gene] for gene in genes], snp_counts, site_counts, test_func=test_func)
+    test_dict = dict(zip(genes, individual_tests))
     results = [(individual_tests[i][0], genes[i]) for i in range(len(genes))]
     results.sort()
-    for p, gene in results[:25]:
-        print p, gene
+    for p, gene in results:
+        print "%s,%s,%s" % (p, gene, ",".join(map(str, test_dict[gene])))
 
     ## Functionally associate groups test
     # Don't bother with empty groups.
     print "Association group tests"
     items = [(k, v) for (k,v) in functional_groups.items() if len(v[1]) > 0]
-    group_tests = perform_tests([v[1] for (k, v) in items], snp_counts, site_counts, test_func=test_func, pseudo=0.5)
+    group_tests = perform_tests([v[1] for (k, v) in items], snp_counts, site_counts, test_func=test_func)
+    test_dict = dict(zip([k for (k,v) in items], group_tests))
     results = [(group_tests[i][0], items[i][0]) for i in range(len(items))]
     results.sort()
-    for p, group_name in results[:25]:
-        print p, group_name, functional_groups[group_name]
+    for p, group_name in results:
+        print "%s,%s,%s,%s" % (p, group_name, " ".join(map(str,functional_groups[group_name][1])), ",".join(map(str,test_dict[group_name])))
     
 if __name__ == '__main__':
     # First EXP
@@ -380,4 +381,12 @@ if __name__ == '__main__':
         print name
         main(site_counts, snp_counts, genes, functional_groups, test_func=test_func)
         print ""
+    ## Just for output for spreadsheet
+    #for gene in genes:
+        #counts = ka_ks_counts_for_gene_group([gene], snp_counts, site_counts, pseudo=0.0)
+        #print "%s,%s" % (gene, ",".join(map(str,counts)))
+    #items = [(k, v) for (k,v) in functional_groups.items() if len(v[1]) > 0]    
+    #for k, v in items:
+        #counts = ka_ks_counts_for_gene_group(v[1], snp_counts, site_counts, pseudo=0.0)
+        #print "%s,%s,%s, %s" % (k, v[0], " ".join(v[1]), ",".join(map(str,counts)))
     

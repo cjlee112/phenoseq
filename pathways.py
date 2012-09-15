@@ -187,6 +187,6 @@ if __name__ == '__main__':
             #print i, v, k, pathway_dict[k][1]
     
     results = analyze_nonsyn_groups(pathway_dict, snps, annodb, al, dna)
-    for k, v in results[:20]:
-        print "%s %s: %s" % (k, v, ", ".join(pathway_dict[v][1]))
+    for k, v in results:
+        print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v][1]))
 
