@@ -1,20 +1,20 @@
-from scipy import stats
 from math import log
 import glob
 import re
 import sys
+import warnings
 try:
     from scipy import stats
 except ImportError:
-    pass
+    warnings.warn('scipy.stats not found.  Some phenoseq functions will not work.')
 try:
     from Bio import SeqIO
 except ImportError:
-    pass
+    warnings.warn('biopython not found.  Some phenoseq functions will not work.')
 try:
     from pygr import seqdb, annotation, cnestedlist, sequtil
 except ImportError:
-    pass
+    warnings.warn('pygr not found.  Some phenoseq functions will not work.')
     
 
 ''' simple usage example:
