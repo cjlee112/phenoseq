@@ -7,7 +7,24 @@ Basic Phenoseq User Guide
 Dependencies
 ------------
 
-Phenoseq depends on pygr (https://code.google.com/p/pygr/) and BioPython (http://www.biopython.org/wiki/SeqIO) for processing and parsing, and SciPy (http://www.scipy.org/) for statistics.
+* ``scipy.stats`` is used both for scoring experimental
+  results, and for simulation.  For more information see
+  http://www.scipy.org/
+
+Other dependencies are optional, depending on what phenoseq
+functions you wish to use:
+
+* ``numpy`` is required for phenoseq simulations.
+  For more information see http://numpy.scipy.org/
+* Biopython's ``SeqIO`` module is used for reading
+  Genbank CDS annotations for a genome, in
+  :func:`analyze.read_genbank_annots()`.
+  For more information, see
+  http://www.biopython.org/wiki/SeqIO
+* ``pygr`` is used to represent gene annotation intervals
+  on a genome, for scoring experimental results.
+  You can obtain it from https://code.google.com/p/pygr/
+
 
 -------------------
 Processing Raw Data
