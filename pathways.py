@@ -176,16 +176,10 @@ if __name__ == '__main__':
     tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
 
     pathway_dict = load_func_assoc()
+    for k,v in pathway_dict.items():
+        pathway_dict[k] = v[1] # only keep the gene list
         
     (annodb, al, dna, snps, gsd) = load_data(tagFiles)
-    snp_counts = count_snps_per_gene(snps, al, dna)
-    pathway_counts = count_snps_per_pathway(snp_counts, pathway_dict)
-    results = [(float(v) / len(pathway_dict[k][1]),k) for k, v in pathway_counts.items() if len(pathway_dict[k][1])]
-    results.sort()
-    #for i, (v, k) in list(enumerate(reversed(results)))[:20]:
-        #if v > 0:
-            #print i, v, k, pathway_dict[k][1]
-    
     results = analyze_nonsyn_groups(pathway_dict, snps, annodb, al, dna)
     for k, v in results:
         print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v][1]))
