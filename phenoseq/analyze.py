@@ -408,7 +408,7 @@ def score_pooled(regionSNPs, regionXS, useBonferroni=True):
 
 
 class GeneCrossSection(object):
-    'object acts as function for computing gene cross-section'
+    'object acts as dict for computing gene cross-section'
     def __init__(self, geneSNPdict, gcTotal=None, atTotal=None,
                  geneGCDict=None, dnaseq=None, annodb=None):
         self.geneSNPdict = geneSNPdict
@@ -429,7 +429,7 @@ class GeneCrossSection(object):
         self.nGC = nGC
         self.nAT = nAT
 
-    def __call__(self, k):
+    def __getitem__(self, k):
         'Compute effective mutation cross-section for a gene'
         try:
             gcLen, atLen = self.geneGCDict[k]
@@ -438,13 +438,6 @@ class GeneCrossSection(object):
         return float(self.nGC * gcLen) / self.gcTotal \
                 + float(self.nAT * atLen) / self.atTotal
 
-    def calc_all(self):
-        'return cross-section dict of all genes in geneSNPdict'
-        xs = {}
-        for k, v in self.geneSNPdict.items():
-            xs[k] = self(k)
-        return xs
-
 
 def score_genes_pooled(geneSNPdict, useBonferroni=True,
                        **kwargs):
@@ -452,12 +445,11 @@ def score_genes_pooled(geneSNPdict, useBonferroni=True,
     multiple samples are pooled in each library).
     Will use pre-computed GC/AT count data if you provide it'''
     geneXS = GeneCrossSection(geneSNPdict, **kwargs)
-    return score_pooled(geneSNPdict, geneXS.calc_all(),
+    return score_pooled(geneSNPdict, geneXS,
                         useBonferroni=useBonferroni)
 
-def get_group_xs_snps(geneSNPdict, groupDict, **kwargs):
+def get_group_xs_snps(geneSNPdict, geneXS, groupDict):
     'combine snps and cross-sections for genes in each group'
-    geneXS = GeneCrossSection(geneSNPdict, **kwargs)
     groupXS = {}
     groupSNPs = {}
     for k,genes in groupDict.items():
@@ -465,17 +457,19 @@ def get_group_xs_snps(geneSNPdict, groupDict, **kwargs):
         xs = 0.
         for gene in genes:
             snps += geneSNPdict.get(gene, [])
-            xs += geneXS(gene)
+            xs += geneXS[gene]
         groupXS[k] = xs
         groupSNPs[k] = snps
     return groupSNPs, groupXS
 
 
-def score_groups_pooled(geneSNPdict, groupDict,
+def score_groups_pooled(geneSNPdict, groupDict, geneXS=None,
                         useBonferroni=True, **kwargs):
     'poisson p-value for gene groups'
-    groupSNPs, groupXS = get_group_xs_snps(geneSNPdict,
-                                           groupDict, **kwargs)
+    if not geneXS:
+        geneXS = GeneCrossSection(geneSNPdict, **kwargs)
+    groupSNPs, groupXS = get_group_xs_snps(geneSNPdict, geneXS,
+                                           groupDict)
     return score_pooled(groupSNPs, groupXS,
                         useBonferroni=useBonferroni)
 
