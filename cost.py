@@ -1,11 +1,25 @@
 import glob
 import subprocess
 from math import sqrt
+import warnings
 try:
     import numpy
+except ImportError:
+    warnings.warn('unable to import numpy, so some calcs not supported')
+try:
     from matplotlib import pyplot
 except ImportError:
-    pass
+    warnings.warn('unable to import matplotlib, so graphs not supported')
+
+try:
+    from phenoseq import analyze
+except ImportError:
+    import os.path
+    import sys
+    p = os.path.dirname(os.path.abspath(__file__)) # phenoseq test dir
+    sys.path.append(os.path.dirname(p)) # add phenoseq source root dir
+    from phenoseq import analyze
+
 
 def get_nstrain(tag):
     'return #strains in each pool'
