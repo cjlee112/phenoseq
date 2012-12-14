@@ -25,7 +25,7 @@ def spontaneous_mutations():
     return d
 
 def empirical_mutations():
-    d = {('AT','GC'): 89./4099, ('GC', 'AT'): 3960.4099, ('AT','TA'): 3./4099, ('GC', 'TA'): 3./4099, ('AT', 'CG'): 19./4099, ('GC', 'CG'): 25./4099}
+    d = {('AT','GC'): 89./4099, ('GC', 'AT'): 3960./4099, ('AT','TA'): 3./4099, ('GC', 'TA'): 3./4099, ('AT', 'CG'): 19./4099, ('GC', 'CG'): 25./4099}
     return d
 
 mutation_types = [('AT','GC'), ('GC', 'AT'), ('AT','TA'), ('GC', 'TA'), ('AT', 'CG'), ('GC', 'CG')]
