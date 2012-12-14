@@ -1,4 +1,3 @@
-import analyze
 from math import log, exp, sqrt
 from pathways import count_snps_per_gene, load_data, load_func_assoc
 
@@ -29,92 +28,6 @@ def empirical_mutations():
     return d
 
 mutation_types = [('AT','GC'), ('GC', 'AT'), ('AT','TA'), ('GC', 'TA'), ('AT', 'CG'), ('GC', 'CG')]
-
-def mutation_counts(annodb, al, dna, snps, gsd):
-    """Computes number of each mutation type from list of snps, with context."""
-    mutation_map = dict()
-    mutations = dict()
-    for k in mutation_types:
-        a, b = k
-        mutation_map[(a[0], b[0])] = k
-        mutation_map[(a[1], b[1])] = k
-        mutations[k] = []
-    prev_counts = dict(zip('ACGT', [0,0,0,0]))
-    next_counts = dict(zip('ACGT', [0,0,0,0]))
-    # Find and classify mutations
-    #for v in tagDict.get_snps():
-    for j in snps:
-        ori, new = j.ref, j.alt
-        pos = j.pos
-        prev = str(dna[pos-2:pos-1])
-        next = str(dna[pos:pos+1])
-        prev_counts[prev] += 1
-        next_counts[next] += 1
-        mutations[mutation_map[(ori, new)]].append((prev, next))
-    for k in mutation_types:
-        print k, len(mutations[k])
-    return mutations
-
-def empirical_codon_distribution(annodb, al, dna):
-    codons = {}
-    for k in annodb.keys():
-        seq = str(annodb[k].sequence)
-        if not len(seq) % 3:
-            continue
-        for i in range(0,len(seq), 3):
-            codon = seq[i:i+3]
-            try:
-                codons[codon] += 1
-            except KeyError:
-                codons[codon] = 1
-    return normalize_dict(codons)        
-
-#def NTG_codon_hit_distribution(annodb, al, dna, snps, gsd):
-    #codons = {}
-    #for snp in snps:
-        #pos = snp.pos
-        #try:
-            #geneSNP = al[dna[pos - 1:pos]].keys()[0]
-        #except IndexError:
-            #pass
-        #else:
-            #if geneSNP.orientation < 0:
-                #geneSNP = -geneSNP
-            #gene = geneSNP.id
-            #ipos = geneSNP.start % 3
-            #codonStart = geneSNP.start - ipos
-            #codon = str(geneSNP.path.sequence[codonStart:codonStart + 3])
-            #try:
-                #codons[codon] += 1
-            #except KeyError:
-                #codons[codon] = 1.
-    #return normalize_dict(codons)
-    
-def GC_bias_codon_dist(gc_content=None):
-    if not gc_content:
-        annodb, al, dna = analyze.read_genbank_annots("NC_000913.gbk")
-        counts = {'GC':0., 'AT':0.}
-        for s in str(dna):
-            if s in 'GC':
-                counts['GC'] += 1
-            else:
-                counts['AT'] += 1
-        GC_dist = normalize_dict(counts)
-    else:
-        GC_dist = {'GC':gc_content, 'AT':1-gc_content}
-    codon_dist = {}
-    for a in 'ATCG':
-        for b in 'ATCG':
-            for c in 'ATCG':
-                weight = 1.
-                codon = a + b+ c
-                for x in [a,b,c]:
-                    for key in GC_dist.keys():
-                        if x in key:
-                            weight *= GC_dist[key]
-                            break
-                codon_dist[codon] = weight
-    return normalize_dict(codon_dist)
 
 ## Ka/Ks ratio ##
 
