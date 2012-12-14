@@ -17,7 +17,22 @@ def bam2pileup(bamfile, reffile):
                            filestem + '.bam'], stdout=pileupFile)
     pileupFile.close()
 
-def merge_bamfiles(bamfiles, tagfilter, nameFunc=None, 
+def get_tag(filename):
+    'extract tag string from filename'
+    return filename.split('.')[0].split('_')[-1]
+
+def get_merge_name(tag, bamlist):
+    'create filename for merging list of bam files'
+    l = [s.split('_')[2] for s in bamlist]
+    l.sort()
+    return '_'.join([tag] + l) + '.bam'
+
+def generate_sublists(bamlist):
+    'generate leave-one-out jackknife samples'
+    for i in range(len(bamlist)):
+        yield bamlist[:i] + bamlist[i + 1:]
+
+def merge_bamfiles(bamfiles, tagfilter=get_tag, nameFunc=None, 
                    sublistFunc=lambda x:(x)):
     d = {}
     for filename in bamfiles:
