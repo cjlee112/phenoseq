@@ -1,4 +1,4 @@
-from phenoseq.analyze import *
+import analyze
 from math import log, exp, sqrt
 from pathways import count_snps_per_gene, load_data, load_func_assoc
 
@@ -92,7 +92,7 @@ def empirical_codon_distribution(annodb, al, dna):
     
 def GC_bias_codon_dist(gc_content=None):
     if not gc_content:
-        annodb, al, dna = read_genbank_annots("NC_000913.gbk")
+        annodb, al, dna = analyze.read_genbank_annots("NC_000913.gbk")
         counts = {'GC':0., 'AT':0.}
         for s in str(dna):
             if s in 'GC':

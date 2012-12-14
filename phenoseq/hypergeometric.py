@@ -1,4 +1,4 @@
-from phenoseq.analyze import *
+import analyze
 from math import log, exp, sqrt
 from pathways import count_snps_per_gene, load_data, load_func_assoc
 
@@ -6,7 +6,7 @@ from scipy.stats import hypergeom
 
 def phenoseq_top_genes(tagFiles):
     (annodb, al, dna, snps, gsd) = load_data(tagFiles)
-    results = analyze_nonsyn(snps, annodb, al, dna)
+    results = analyze.analyze_nonsyn(snps, annodb, al, dna)
     return results
 
 def p_value(num_genes, num_genes_int_top_list, num_top_genes, total_genes=4000):
