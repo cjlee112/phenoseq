@@ -1,10 +1,11 @@
 from math import log, exp, sqrt
 from pathways import load_func_assoc
+from pygr import sequtil
 
 import numpy
 from matplotlib import pyplot
 
-from scipy.stats import binom
+from scipy.stats import binom,fisher_exact
 
 rc = dict(A='T', C='G', G='C', T='A')
 
@@ -185,7 +186,8 @@ def confidence_interval(a, b, c, d, z=1.65):
 
 
 def fisher_test(a, b, c, d):
-    oddsratio, pvalue = stats.fisher_exact([[a, b], [c, d]], alternative='greater')
+    oddsratio, pvalue = fisher_exact([[a, b], [c, d]],
+                                     alternative='greater')
     lower, upper = confidence_interval(a, b, c, d)
     return pvalue, lower, upper, oddsratio
     # rpy2 version
@@ -261,7 +263,9 @@ def run_all():
     import sys
 
     gbfile = sys.argv[1]
-    tagFiles = sys.argv[2:]
+    groupfile = sys.argv[2]
+    transfile = sys.argv[3]
+    tagFiles = sys.argv[4:]
     
     # does this filter out replicates that appear in every tag?
     annodb, al, dna = analyze.read_genbank_annots(gbfile)
@@ -274,7 +278,7 @@ def run_all():
     snp_counts = analyze.get_gene_na_ns(gsd)
     
     genes = annodb.keys()
-    functional_groups = load_func_assoc()
+    functional_groups = load_func_assoc(groupfile, transfile)
 
     #binomial_tests(snp_counts, site_counts)
     #main(site_counts, snp_counts, genes, functional_groups, test_func=binomial_test)
