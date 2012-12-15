@@ -1,5 +1,5 @@
 from math import log, exp, sqrt
-from pathways import count_snps_per_gene, load_data, load_func_assoc
+from pathways import load_func_assoc
 
 import numpy
 from matplotlib import pyplot
@@ -28,6 +28,8 @@ def empirical_mutations():
     return d
 
 mutation_types = [('AT','GC'), ('GC', 'AT'), ('AT','TA'), ('GC', 'TA'), ('AT', 'CG'), ('GC', 'CG')]
+
+
 
 ## Ka/Ks ratio ##
 
@@ -72,6 +74,8 @@ def codon_weighting(mutation_dist, codon_dist=None, mu=1.):
         codon_transitions[(codon, codon)] = 1.-mu
     return codon_transitions
 
+
+
 def sites_count_dict(codon_transitions=codon_weighting(empirical_mutations())):
     """Count sites for each codon, weighted by a mutation distribution."""
     codons = []
@@ -99,6 +103,8 @@ def sites_count_dict(codon_transitions=codon_weighting(empirical_mutations())):
         d[codon] = (a,s)
     return d
 
+
+
 def count_codons(seq=None):
     """ Counts codons in dna sequence."""
     codons = {}
@@ -109,6 +115,8 @@ def count_codons(seq=None):
         except KeyError:
             codons[codon] = 1
     return codons
+
+
 
 def count_sites(codons, d=sites_count_dict()):
     """Counts total sites in a dict (multiset) of codons."""
@@ -123,6 +131,8 @@ def count_sites(codons, d=sites_count_dict()):
             pass
     return (Na, Ns)
 
+
+
 def genes_sites_dict(annodb):
     """Compute site counts for all genes and return a dictionary with the counts."""
     site_counts = {}
@@ -133,44 +143,7 @@ def genes_sites_dict(annodb):
         site_counts[k] = (len(seq), Na, Ns)
     return site_counts
 
-def snps_per_gene(snps, al, dna):
-    # Count snps for each gene
-    snp_counts = {}
-    for snp in snps:
-        pos = snp.pos
-        try:
-            geneSNP = al[dna[pos - 1:pos]].keys()[0]
-        except IndexError:
-            continue
-        else:
-            Na = 0
-            Ns = 0
-            # Determine if snp is synonymous or not.
-            if geneSNP.orientation < 0:
-                geneSNP = -geneSNP
-            gene = geneSNP.id
-            ipos = geneSNP.start % 3
-            codonStart = geneSNP.start - ipos
-            codon = str(geneSNP.path.sequence[codonStart:codonStart + 3])
-            b = snp.alt # substitution letter
-            if geneSNP.sequence.orientation < 0: # must complement
-                b = rc[b.upper()]
-            codonAlt = codon[:ipos] + b + codon[ipos + 1:]
-            snp.aaRef = sequtil.translate_orf(codon)
-            snp.aaAlt = sequtil.translate_orf(codonAlt)
-            if snp.aaRef == snp.aaAlt:
-                Ns += 1
-            else:
-                Na += 1
-            try:
-                a, s = snp_counts[gene]
-            except KeyError:
-                pass
-            else:
-                Na += a
-                Ns += s
-            snp_counts[gene] = (Na, Ns)
-    return snp_counts
+
 
 def ka_ks_counts_for_gene_group(genes, snp_counts, site_counts, pseudo=1.0):
     """Computes the contigency table for a group of genes."""
@@ -193,6 +166,8 @@ def ka_ks_counts_for_gene_group(genes, snp_counts, site_counts, pseudo=1.0):
     a,b,c,d = map(lambda x: int(x + pseudo), [Ga, Gs, Na, Ns])
     return a, b, c, d
     
+
+
 ## Fisher Exact Test    
 def confidence_interval(a, b, c, d, z=1.65):
     """Confidence interval fo Fisher Exact test."""
@@ -207,6 +182,8 @@ def confidence_interval(a, b, c, d, z=1.65):
 
     return (exp(l - z * s), exp(1 + z*s))
 
+
+
 def fisher_test(a, b, c, d):
     oddsratio, pvalue = stats.fisher_exact([[a, b], [c, d]], alternative='greater')
     lower, upper = confidence_interval(a, b, c, d)
@@ -219,6 +196,8 @@ def fisher_test(a, b, c, d):
     #v = robjects.IntVector([Ga, Gs, int(Ga_exp+0.5), int(Gs_exp+0.5)]) 
     #fet = fisher_test(matrix(v, nrow=2), alternative="greater")
     #print Ga_exp, Gs_exp, fet[0][0], fet[1][0], fet[1][1] # p-value, confidence interval (95%)
+
+
 
 ## Binomial Test
 
@@ -238,6 +217,8 @@ def binomial_test(Ga, Gs, Na, Ns, z=1.65):
     upper = (p + 1. /(2*n)*z*z + b) / (1. + 1./n * z * z)
     return (pvalue, lower, upper, p, theta)
     
+
+
 def perform_tests(gene_groups, snp_counts, site_counts, test_func=fisher_test, pseudo=1.0):
     """Performs Fisher's Exact test for all genes individually."""
     tests = []
@@ -246,7 +227,10 @@ def perform_tests(gene_groups, snp_counts, site_counts, test_func=fisher_test, p
         tests.append(test_func(a, b, c, d))
     return tests
     
-def main(site_counts, snp_counts, genes, functional_groups, test_func=fisher_test):
+
+
+def run_tests(site_counts, snp_counts, genes, functional_groups,
+              test_func=fisher_test):
     ## Genome-wide test
     genome_test = perform_tests([genes], snp_counts, site_counts, test_func=test_func)
     print "Genome-wide", genome_test[0]
@@ -271,19 +255,23 @@ def main(site_counts, snp_counts, genes, functional_groups, test_func=fisher_tes
     for p, group_name in results:
         print "%s,%s,%s,%s" % (p, group_name, " ".join(map(str,functional_groups[group_name][1])), ",".join(map(str,test_dict[group_name])))
     
-if __name__ == '__main__':
-    # First EXP
-    #tagFiles = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
-    # Luisa's EXP
-    tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
+
+def run_all():
+    import analyze
+    import sys
+
+    gbfile = sys.argv[1]
+    tagFiles = sys.argv[2:]
     
     # does this filter out replicates that appear in every tag?
-    (annodb, al, dna, snps, gsd) = load_data(tagFiles)
+    annodb, al, dna = analyze.read_genbank_annots(gbfile)
+    snps = analyze.read_tag_files(tagFiles)
+    gsd = analyze.map_snps_chrom1(snps, al, dna)
 
-    # Count sites for each gene
+    # Count nonsyn vs. syn. sites for each gene
     site_counts = genes_sites_dict(annodb)
-    # Count snps for each gene
-    snp_counts = count_snps_per_gene(snps, al, dna)
+    # Count nonsyn vs. syn. snps for each gene
+    snp_counts = analyze.get_gene_na_ns(gsd)
     
     genes = annodb.keys()
     functional_groups = load_func_assoc()
@@ -292,8 +280,9 @@ if __name__ == '__main__':
     #main(site_counts, snp_counts, genes, functional_groups, test_func=binomial_test)
     for name, test_func in [("Fisher test", fisher_test), ("Binomial Test", binomial_test)]:
         print name
-        main(site_counts, snp_counts, genes, functional_groups, test_func=test_func)
-        print ""
+        run_tests(site_counts, snp_counts, genes, functional_groups,
+                  test_func=test_func)
+        print
     ## Just for output for spreadsheet
     #for gene in genes:
         #counts = ka_ks_counts_for_gene_group([gene], snp_counts, site_counts, pseudo=0.0)
@@ -303,3 +292,5 @@ if __name__ == '__main__':
         #counts = ka_ks_counts_for_gene_group(v[1], snp_counts, site_counts, pseudo=0.0)
         #print "%s,%s,%s, %s" % (k, v[0], " ".join(v[1]), ",".join(map(str,counts)))
     
+if __name__ == '__main__':
+    run_all()

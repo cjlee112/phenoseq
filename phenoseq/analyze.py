@@ -387,6 +387,13 @@ def filter_nonsyn(geneSNPdict):
             d[gene] = snps
     return d
 
+def get_gene_na_ns(geneSNPdict):
+    'get dict with counts (Na,Ns) for each gene'
+    d = {}
+    for gene,snps in geneSNPdict.items():
+        Na = len(filter(is_nonsyn, snps))
+        d[gene] = (Na, len(snps) - Na)
+    return d
 
 
 #######################################################################

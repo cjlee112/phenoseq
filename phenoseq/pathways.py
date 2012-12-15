@@ -108,24 +108,25 @@ def promoter_snps(promoter_offset=500):
             results.append((gene, len(l)))
             #print gene, len(l), seq.orientation
     return results
-    
-    
-if __name__ == '__main__':
-    import analyze
-    # First EXP
-    #tagFiles = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
 
-    # Luisa's EXP
-    tagFiles = ["aligned_s_8_%s.vcf" % x for x in ['ATCACG','CGATGT','TTAGGC','TGACCA', 'ACAGTG', 'GCCAAT', 'CAGATC', 'ACTTGA']]
+    
+def main():
+    import analyze
+    import sys
+
+    gbfile = sys.argv[1]
+    tagFiles = sys.argv[2:]
 
     pathway_dict = load_func_assoc()
     for k,v in pathway_dict.items():
         pathway_dict[k] = v[1] # only keep the gene list
         
-    annodb, al, dna = analyze.read_genbank_annots('NC_000913.gbk')
-    snps = read_tag_files(tagFiles)
+    annodb, al, dna = analyze.read_genbank_annots(gbfile)
+    snps = analyze.read_tag_files(tagFiles)
     results = analyze.analyze_nonsyn_groups(pathway_dict, snps, annodb,
                                             al, dna)
     for k, v in results:
         print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v][1]))
 
+if __name__ == '__main__':
+    main()
