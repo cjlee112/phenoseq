@@ -463,8 +463,13 @@ def get_group_xs_snps(geneSNPdict, geneXS, groupDict):
         snps = []
         xs = 0.
         for gene in genes:
-            snps += geneSNPdict.get(gene, [])
-            xs += geneXS[gene]
+            try:
+                xs += geneXS[gene]
+            except KeyError:
+                warnings.warn('ignoring missing gene annotation: '
+                              + gene)
+            else:
+                snps += geneSNPdict.get(gene, [])
         groupXS[k] = xs
         groupSNPs[k] = snps
     return groupSNPs, groupXS
