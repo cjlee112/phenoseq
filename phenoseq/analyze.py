@@ -608,7 +608,7 @@ def analyze_monodom(genome, vcfFiles=glob.glob('*.vcf'),
     gsd = map_snps(snps, al, genome, exonGene)
     return score_genes(gsd, len(vcfFiles), totalSize, geneLengths)
 
-if __name__ == '__main__':
+def main():
     print 'reading gene annotations from', sys.argv[1]
     annodb, al, dna = read_genbank_annots(sys.argv[1])
     tagFiles = sys.argv[2:]
@@ -617,4 +617,7 @@ if __name__ == '__main__':
     print 'scoring genes...'
     results = analyze_nonsyn(snps, annodb, al, dna)
     print 'top 20 hits:', results[:20]
+
+if __name__ == '__main__':
+    main()
     

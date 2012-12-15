@@ -470,8 +470,26 @@ def min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50.,
             npool = nstrain / nlib
             hits, cov = min_coverage(nstrain, npool, ntarget=ntarget,
                                      **kwargs)
-            cost = nlib * libCost + laneCost * nlib * cov / laneCov
+            cost = nlib * libCost + float(laneCost) * nlib * cov / laneCov
             print nlib, cov, cost
             l.append((cost, nlib, cov, hits))
     l.sort()
     return l[0]
+
+def main():
+    import sys
+    print '''Strains: %s
+Coverage per lane: %s
+Cost per lane: $%s
+Cost per library: $%s
+Target genes: %s
+''' % sys.argv[1:]
+    t = min_cost(*[int(s) for s in sys.argv[1:]])
+    print '''Minimum experiment cost: $%0.2f
+Total libraries: %d
+Coverage per library: %1.0f
+Expected hits: %1.2f
+''' % t
+
+if __name__ == '__main__':
+    main()
