@@ -73,6 +73,15 @@ def try_install(**kwargs):
         url = 'https://github.com/cjlee112/phenoseq',
         license = 'New BSD License',
         classifiers = CLASSIFIERS,
+        entry_points = {
+            'console_scripts': [
+                'phenoseq_analyze = phenoseq.analyze:main',
+                'phenoseq_cost = phenoseq.simulate:main',
+                'phenoseq_pathways = phenoseq.pathways:main',
+                'phenoseq_kaks = phenoseq.ka_ks:run_all',
+                'phenoseq_hypergeom = phenoseq.hypergeometric:main',
+                ],
+            },
 
         packages = ['phenoseq'],
         **kwargs
