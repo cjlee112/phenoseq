@@ -52,10 +52,11 @@ def load_gene_translations(filename="16.1/data/genes.col"):
     return d    
     
 
-def load_func_assoc(filename="16.1/data/func-associations.col"):
+def load_func_assoc(filename="16.1/data/func-associations.col",
+                    transfile="16.1/data/genes.col"):
     """Loads Ecocyc functional associations file. See example at: http://bioinformatics.ai.sri.com/ptools/flatfile-samples/func-associations.col"""
     pathway_dict = dict()
-    trans = load_gene_translations()
+    trans = load_gene_translations(transfile)
     with open(filename) as handle:
         for line in handle:
             # Toss comments.
@@ -115,9 +116,11 @@ def main():
     import sys
 
     gbfile = sys.argv[1]
-    tagFiles = sys.argv[2:]
+    groupfile = sys.argv[2]
+    transfile = sys.argv[3]
+    tagFiles = sys.argv[4:]
 
-    pathway_dict = load_func_assoc()
+    pathway_dict = load_func_assoc(groupfile, transfile)
     for k,v in pathway_dict.items():
         pathway_dict[k] = v[1] # only keep the gene list
         
@@ -126,7 +129,7 @@ def main():
     results = analyze.analyze_nonsyn_groups(pathway_dict, snps, annodb,
                                             al, dna)
     for k, v in results:
-        print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v][1]))
+        print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v]))
 
 if __name__ == '__main__':
     main()
