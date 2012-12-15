@@ -39,6 +39,17 @@ Topic :: Scientific/Engineering :: Bio-Informatics
 # split into lines and filter empty ones
 CLASSIFIERS = filter(None, CLASSIFIERS.splitlines())
 
+entry_points = {
+    'console_scripts': [
+        'phenoseq_analyze = phenoseq.analyze:main',
+        'phenoseq_cost = phenoseq.simulate:main',
+        'phenoseq_pathways = phenoseq.pathways:main',
+        'phenoseq_kaks = phenoseq.ka_ks:run_all',
+        'phenoseq_hypergeom = phenoseq.hypergeometric:main',
+        ],
+    }
+
+
 def check_deps(ignore_pygr=False):
     'check whether our dependencies are installed'
     deps = []
@@ -73,15 +84,6 @@ def try_install(**kwargs):
         url = 'https://github.com/cjlee112/phenoseq',
         license = 'New BSD License',
         classifiers = CLASSIFIERS,
-        entry_points = {
-            'console_scripts': [
-                'phenoseq_analyze = phenoseq.analyze:main',
-                'phenoseq_cost = phenoseq.simulate:main',
-                'phenoseq_pathways = phenoseq.pathways:main',
-                'phenoseq_kaks = phenoseq.ka_ks:run_all',
-                'phenoseq_hypergeom = phenoseq.hypergeometric:main',
-                ],
-            },
 
         packages = ['phenoseq'],
         **kwargs
@@ -93,13 +95,15 @@ def main():
         warnings.warn('''First trying automatic install of
 dependencies, even though this usually fails for numpy...\n\n''')
         try:
-            try_install(install_requires=install_requires)
+            try_install(install_requires=install_requires,
+                        entry_points=entry_points)
         except:
             warnings.warn('''
 
 
 Retrying with minimal dependencies. This should work.''')
-            try_install(install_requires=min_requires)
+            try_install(install_requires=min_requires,
+                        entry_points=entry_points)
     else:
         try_install()
     
