@@ -1,4 +1,3 @@
-from phenoseq.analyze import *
 
 ## For pathways file... here in case it's useful later.
 #def load_pathways(filename):
@@ -112,7 +111,7 @@ def promoter_snps(promoter_offset=500):
     
     
 if __name__ == '__main__':
-
+    import analyze
     # First EXP
     #tagFiles = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
 
@@ -123,9 +122,10 @@ if __name__ == '__main__':
     for k,v in pathway_dict.items():
         pathway_dict[k] = v[1] # only keep the gene list
         
-    annodb, al, dna = read_genbank_annots('NC_000913.gbk')
+    annodb, al, dna = analyze.read_genbank_annots('NC_000913.gbk')
     snps = read_tag_files(tagFiles)
-    results = analyze_nonsyn_groups(pathway_dict, snps, annodb, al, dna)
+    results = analyze.analyze_nonsyn_groups(pathway_dict, snps, annodb,
+                                            al, dna)
     for k, v in results:
         print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v][1]))
 
