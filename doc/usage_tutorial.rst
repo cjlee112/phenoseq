@@ -90,17 +90,53 @@ http://www.novocraft.com/wiki/tiki-index.php?page=Getting+Started&structure=Novo
 
 for more information on using novoalign.
 
+----------
 Analyzing
 ---------
 
-SNP analysis is handled by mkpileup.py and analyze.py. The first script produces vcf files from the .sam files from the alignment::
+These files can then be processed by by phenoseq in various ways. For single gene results, 
+analyze.py can be invoked as::
 
-    python mkpileup.py NC_000913.fna aligned*.sam
+    python analyze.py -g NC_000913.gbk [ACGT]*.vcf
 
-These files can then be processed by analyze.py::
+For pathway phenoseq analysis, additional EcoCyc files are required. Specifically, the file 
+"func-associations.col" is necessary to supply the functionally associated groups, and "genes.col" 
+are required to map the gene names to those used by the genbank annotation file. Then phenoseq can 
+be run on functionally associated groups by::
 
-    python analyze.py NC_000913.gbk [ACGT]*.vcf
+    python pathway.py -g NC_000913.gbk -f func-associations.col -t genes.col [ACGT]*.vcf
 
+Similarly, Ka/Ks ratios and p-values can be computed as follows::
+
+    python ka_ks.py -g NC_000913.gbk -f func-associations.col -t genes.col [ACGT]*.vcff
+
+and hypergeometric p-values with an additional parameter for the number of top genes to 
+test for enrichment in::
+
+    python hypergeometric.py -n 30 -g NC_000913.gbk -f func-associations.col -t genes.col [ACGT]*.vcf
+
+------------
+Simulations
+------------
+
+For experimental design purposes, simulations are available to determine various expected yields and costs.
+Invoke the simulation by::
+
+    python simulate.py num_strains mean_coverage_per_lane cost_per_lane cost_per_library num_targets
+
+For example,::
+
+    user@home$python simulate.py 20 30 1000 50 5
+    Strains: 20
+    Coverage per lane: 30
+    Cost per lane: $1000
+    Cost per library: $50
+    Target genes: 5
+
+    Minimum experiment cost: $7166.67
+    Total libraries: 10
+    Coverage per library: 20
+    Expected hits: 3.71
 
 ---------------------------
 Basic Classes and Functions
