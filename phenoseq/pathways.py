@@ -1,3 +1,6 @@
+from optparse import OptionParser
+
+import analyze
 
 ## For pathways file... here in case it's useful later.
 #def load_pathways(filename):
@@ -110,16 +113,32 @@ def promoter_snps(promoter_offset=500):
             #print gene, len(l), seq.orientation
     return results
 
+def parse_args():
+    usage = "usage: %prog [options] vcf_files"
+    parser = OptionParser(usage=usage)
+    parser.add_option("-g", "--genbank", dest="gbfile",
+                    help="Genbank filename of reference genome")
+    parser.add_option("-f", "--functionals", dest="groupfile",
+                    help="EcoCyc functionally associated groups filename")
+    parser.add_option("-t", "--translation", dest="transfile",
+                    help="EcoCyc genes filename for gene id translation")
+    (options, tagFiles) = parser.parse_args()
+
+    if len(tagFiles) < 1:
+        parser.error("vcf files are required")
+
+    gbfile = options.gbfile
+    groupfile = options.groupfile
+    transfile = options.transfile
+
+    for x in [gbfile, groupfile, transfile]:
+        if not x:
+            print "Missing required files. Try --help for more information."
+            exit()
+    return gbfile, groupfile, transfile, tagFiles
     
-def main():
-    import analyze
-    import sys
-
-    gbfile = sys.argv[1]
-    groupfile = sys.argv[2]
-    transfile = sys.argv[3]
-    tagFiles = sys.argv[4:]
-
+    
+def main(gbfile, groupfile, transfile, tagFiles):
     pathway_dict = load_func_assoc(groupfile, transfile)
     for k,v in pathway_dict.items():
         pathway_dict[k] = v[1] # only keep the gene list
@@ -132,4 +151,5 @@ def main():
         print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v]))
 
 if __name__ == '__main__':
+    (gbfile, groupfile, transfile, tagFiles) = parse_args()
     main()

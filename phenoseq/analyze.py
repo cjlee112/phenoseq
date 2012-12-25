@@ -1,5 +1,6 @@
 from math import log
 import glob
+from optparse import OptionParser
 import re
 import sys
 import warnings
@@ -613,10 +614,27 @@ def analyze_monodom(genome, vcfFiles=glob.glob('*.vcf'),
     gsd = map_snps(snps, al, genome, exonGene)
     return score_genes(gsd, len(vcfFiles), totalSize, geneLengths)
 
-def main():
-    print 'reading gene annotations from', sys.argv[1]
-    annodb, al, dna = read_genbank_annots(sys.argv[1])
-    tagFiles = sys.argv[2:]
+def parse_args():
+    usage = "usage: %prog [options] vcf_files"
+    parser = OptionParser(usage=usage)
+    parser.add_option("-g", "--genbank", dest="gbfile",
+                    help="Genbank filename of reference genome")
+    (options, tagFiles) = parser.parse_args()
+
+    if len(tagFiles) < 1:
+        parser.error("vcf files are required")
+
+    gbfile = options.gbfile
+
+    if not gbfile:
+        print "Missing required files. Try --help for more information."
+        exit()
+    return gbfile, tagFiles
+
+def main(gbfile, tagFiles):
+
+    print 'reading gene annotations from', gbfile
+    annodb, al, dna = read_genbank_annots(gbfile)
     print 'reading tag files:', tagFiles
     snps = read_tag_files(tagFiles)
     print 'scoring genes...'
@@ -624,5 +642,6 @@ def main():
     print 'top 20 hits:', results[:20]
 
 if __name__ == '__main__':
-    main()
+    gbfile, tagFiles = parse_args()
+    main(gbfile, tagFiles)
     

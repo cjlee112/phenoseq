@@ -1,4 +1,4 @@
-
+from optparse import OptionParser
 import random
 import numpy
 from scipy import stats
@@ -477,14 +477,17 @@ def min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50.,
     return l[0]
 
 def main():
-    import sys
+    usage = "usage: %prog nstrain laneCov laneCost libCost ntarget"
+    parser = OptionParser(usage=usage)
+    (options, args) = parser.parse_args()
+    
     print '''Strains: %s
 Coverage per lane: %s
 Cost per lane: $%s
 Cost per library: $%s
 Target genes: %s
-''' % tuple(sys.argv[1:])
-    t = min_cost(*[int(s) for s in sys.argv[1:]])
+''' % tuple(args)
+    t = min_cost(*[int(s) for s in args)
     print '''Minimum experiment cost: $%0.2f
 Total libraries: %d
 Coverage per library: %1.0f

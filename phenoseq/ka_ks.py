@@ -1,11 +1,12 @@
 from math import log, exp, sqrt
+from optparse import OptionParser
 from pathways import load_func_assoc
 from pygr import sequtil
-
 import numpy
 from matplotlib import pyplot
-
 from scipy.stats import binom,fisher_exact
+import analyze
+from pathways import parse_args
 
 rc = dict(A='T', C='G', G='C', T='A')
 
@@ -258,15 +259,7 @@ def run_tests(site_counts, snp_counts, genes, functional_groups,
         print "%s,%s,%s,%s" % (p, group_name, " ".join(map(str,functional_groups[group_name][1])), ",".join(map(str,test_dict[group_name])))
     
 
-def run_all():
-    import analyze
-    import sys
-
-    gbfile = sys.argv[1]
-    groupfile = sys.argv[2]
-    transfile = sys.argv[3]
-    tagFiles = sys.argv[4:]
-    
+def run_all(gbfile, groupfile, transfile, tagFiles):
     # does this filter out replicates that appear in every tag?
     annodb, al, dna = analyze.read_genbank_annots(gbfile)
     snps = analyze.read_tag_files(tagFiles)
@@ -297,4 +290,5 @@ def run_all():
         #print "%s,%s,%s, %s" % (k, v[0], " ".join(v[1]), ",".join(map(str,counts)))
     
 if __name__ == '__main__':
-    run_all()
+    gbfile, groupfile, transfile, tagFiles = parse_args()
+    run_all(gbfile, groupfile, transfile, tagFiles)
