@@ -289,6 +289,10 @@ def run_all(gbfile, groupfile, transfile, tagFiles):
         #counts = ka_ks_counts_for_gene_group(v[1], snp_counts, site_counts, pseudo=0.0)
         #print "%s,%s,%s, %s" % (k, v[0], " ".join(v[1]), ",".join(map(str,counts)))
     
-if __name__ == '__main__':
+def main():
+    # entry point for phenoseq_kaks command defined in setup.py
     gbfile, groupfile, transfile, tagFiles = parse_args()
     run_all(gbfile, groupfile, transfile, tagFiles)
+
+if __name__ == '__main__':
+    main()

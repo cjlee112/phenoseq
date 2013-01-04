@@ -44,7 +44,7 @@ entry_points = {
         'phenoseq_analyze = phenoseq.analyze:main',
         'phenoseq_cost = phenoseq.simulate:main',
         'phenoseq_pathways = phenoseq.pathways:main',
-        'phenoseq_kaks = phenoseq.ka_ks:run_all',
+        'phenoseq_kaks = phenoseq.ka_ks:main',
         'phenoseq_hypergeom = phenoseq.hypergeometric:main',
         ],
     }

@@ -18,7 +18,10 @@ def p_value(num_genes, num_genes_int_top_list, num_top_genes, total_genes=4000):
         p = rv.pmf(range(num_genes_int_top_list, num_genes + 1)).sum()
     return p
 
-def main(gbfile, groupfile, transfile, tagFiles, N=30):
+########################################################################
+# command line interface
+
+def hypergeom_cmd(gbfile, groupfile, transfile, tagFiles, N=30):
     top_genes = phenoseq_top_genes(gbfile, tagFiles)
     pathway_dict = load_func_assoc(groupfile, transfile)
     top_genes_subset = [y for (x,y) in top_genes[:N]]
@@ -40,7 +43,7 @@ def main(gbfile, groupfile, transfile, tagFiles, N=30):
     for p, name, n, genes in results:
         print ",".join(map(str, [p, name, n, " ".join(genes)]))
 
-if __name__ == '__main__':
+def parse_opt():
     usage = "usage: %prog [options] vcf_files"
     parser = OptionParser(usage=usage)
     parser.add_option("-g", "--genbank", dest="gbfile",
@@ -65,6 +68,13 @@ if __name__ == '__main__':
         if not x:
             print "Missing required files. Try --help for more information."
             exit()
-    main(gbfile, groupfile, transfile, tagFiles, N=30)
-    
-    
+    return gbfile, groupfile, transfile, tagFiles, N
+
+def main():
+    # entry point for phenoseq_hypergeom command defined in setup.py
+    gbfile, groupfile, transfile, tagFiles, N = parse_opt()
+    main(gbfile, groupfile, transfile, tagFiles, N)
+
+if __name__ == '__main__':
+    main()
+

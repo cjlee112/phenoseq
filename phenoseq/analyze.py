@@ -614,6 +614,10 @@ def analyze_monodom(genome, vcfFiles=glob.glob('*.vcf'),
     gsd = map_snps(snps, al, genome, exonGene)
     return score_genes(gsd, len(vcfFiles), totalSize, geneLengths)
 
+
+#################################################################
+# command-line usage
+
 def parse_args():
     usage = "usage: %prog [options] vcf_files"
     parser = OptionParser(usage=usage)
@@ -631,7 +635,7 @@ def parse_args():
         exit()
     return gbfile, tagFiles
 
-def main(gbfile, tagFiles):
+def analyze_cmd(gbfile, tagFiles):
 
     print 'reading gene annotations from', gbfile
     annodb, al, dna = read_genbank_annots(gbfile)
@@ -641,7 +645,10 @@ def main(gbfile, tagFiles):
     results = analyze_nonsyn(snps, annodb, al, dna)
     print 'top 20 hits:', results[:20]
 
-if __name__ == '__main__':
+def main():
+    # entry point for phenoseq_analyze command defined in setup.py
     gbfile, tagFiles = parse_args()
-    main(gbfile, tagFiles)
-    
+    analyze_cmd(gbfile, tagFiles)
+
+if __name__ == '__main__':
+    main()

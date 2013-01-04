@@ -477,6 +477,7 @@ def min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50.,
     return l[0]
 
 def main():
+    # entry point for phenoseq_simulate command defined in setup.py
     usage = "usage: %prog nstrain laneCov laneCost libCost ntarget"
     parser = OptionParser(usage=usage)
     (options, args) = parser.parse_args()

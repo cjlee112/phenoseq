@@ -138,7 +138,7 @@ def parse_args():
     return gbfile, groupfile, transfile, tagFiles
     
     
-def main(gbfile, groupfile, transfile, tagFiles):
+def pathways_cmd(gbfile, groupfile, transfile, tagFiles):
     pathway_dict = load_func_assoc(groupfile, transfile)
     for k,v in pathway_dict.items():
         pathway_dict[k] = v[1] # only keep the gene list
@@ -150,6 +150,10 @@ def main(gbfile, groupfile, transfile, tagFiles):
     for k, v in results:
         print "%s,%s,%s" % (k, v, " ".join(pathway_dict[v]))
 
-if __name__ == '__main__':
+def main():
+    # entry point for phenoseq_pathways command defined in setup.py
     (gbfile, groupfile, transfile, tagFiles) = parse_args()
+    pathways_cmd(gbfile, groupfile, transfile, tagFiles)
+
+if __name__ == '__main__':
     main()
