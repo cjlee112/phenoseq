@@ -488,7 +488,7 @@ Cost per lane: $%s
 Cost per library: $%s
 Target genes: %s
 ''' % tuple(args)
-    t = min_cost(*[int(s) for s in args)
+    t = min_cost(*[int(s) for s in args])
     print '''Minimum experiment cost: $%0.2f
 Total libraries: %d
 Coverage per library: %1.0f

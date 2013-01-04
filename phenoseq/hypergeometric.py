@@ -73,7 +73,7 @@ def parse_opt():
 def main():
     # entry point for phenoseq_hypergeom command defined in setup.py
     gbfile, groupfile, transfile, tagFiles, N = parse_opt()
-    main(gbfile, groupfile, transfile, tagFiles, N)
+    hypergeom_cmd(gbfile, groupfile, transfile, tagFiles, N)
 
 if __name__ == '__main__':
     main()
