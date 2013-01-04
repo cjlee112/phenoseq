@@ -39,7 +39,8 @@ run the ``phenoseq_analyze`` command::
 
     phenoseq_analyze -g NC_000913.gbk [ACGT]*.vcf
 
-For pathway phenoseq analysis, additional EcoCyc files are required. Specifically, the file 
+For pathway phenoseq analysis, additional 
+`EcoCyc <http://ecocyc.org>`_ files are required. Specifically, the file 
 "func-associations.col" is necessary to supply the functionally associated groups, and "genes.col" 
 are required to map the gene names to those used by the genbank annotation file. Then phenoseq can 
 be run on functionally associated groups by::
