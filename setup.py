@@ -11,6 +11,8 @@ short-read data from such an experiment.
 """
 
 import warnings
+import sys
+import subprocess
 
 try:
     from setuptools import setup
@@ -49,26 +51,26 @@ entry_points = {
         ],
     }
 
+def missing_dep(importCmd):
+    '''We are forced to check import success in a separate process,
+    because successfully installed dependencies STILL fail to import
+    in this process (that installed them)!'''
+    try:
+        subprocess.check_output([sys.executable, '-c', importCmd])
+    except subprocess.CalledProcessError:
+        return True
 
 def check_deps(ignore_pygr=False):
     'check whether our dependencies are installed'
     deps = []
-    try:
-        import numpy
-    except ImportError:
+    if missing_dep('import numpy'):
         deps.append('numpy')
-    try:
-        from scipy import stats
-    except ImportError:
+    if missing_dep('from scipy import stats'):
         deps.append('scipy')
-    try:
-        from Bio import SeqIO
-    except ImportError:
+    if missing_dep('from Bio import SeqIO'):
         deps.append('biopython')
     if not ignore_pygr:
-        try:
-            from pygr import cnestedlist
-        except ImportError:
+        if missing_dep('from pygr import cnestedlist'):
             deps.append('pygr')
     return deps
 
