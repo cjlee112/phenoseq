@@ -71,7 +71,7 @@ sequencing experiments.
 Simply applying this marginal distribution independently
 to each target gene is not strictly valid, since the :math:`k` values for
 target genes in a phenotype sequencing experiment
-are *not* independent (due to the :math:`h \ge 0`
+are *not* independent (due to the :math:`h \ge 1`
 condition for the entire target region)!
 
 By contrast, for a non-target gene, the count distribution is just:
