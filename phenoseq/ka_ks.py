@@ -3,7 +3,6 @@ from optparse import OptionParser
 from pathways import load_func_assoc
 from pygr import sequtil
 import numpy
-from matplotlib import pyplot
 from scipy.stats import binom,fisher_exact
 import analyze
 from pathways import parse_args
