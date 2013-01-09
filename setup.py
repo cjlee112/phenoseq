@@ -74,6 +74,22 @@ def check_deps(ignore_pygr=False):
             deps.append('pygr')
     return deps
 
+def pip_install(pkg):
+    try:
+        subprocess.check_output(['pip', 'install', pkg])
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+def numpy_install_kluge():
+    'setuptools fails to install numpy?!? But pip can install numpy...'
+    try:
+        import numpy
+        return True # already installed
+    except ImportError:
+        warnings.warn('Trying to install numpy using pip...')
+        return pip_install('numpy') # see if pip can install it
+
 def try_install(**kwargs):
     'try to install phenoseq using setup()'
     setup(
@@ -94,7 +110,8 @@ def try_install(**kwargs):
 
 def main():
     if has_setuptools:
-        warnings.warn('''First trying automatic install of
+        if not numpy_install_kluge(): # didn't get numpy, so this may fail...
+            warnings.warn('''First trying automatic install of
 dependencies, even though this usually fails for numpy...\n\n''')
         try:
             try_install(install_requires=install_requires,
