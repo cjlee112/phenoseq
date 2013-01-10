@@ -94,7 +94,7 @@ def try_install(**kwargs):
     'try to install phenoseq using setup()'
     setup(
         name = 'phenoseq',
-        version= '1.0',
+        version= '0.5',
         description = 'Phenoseq, a simulation and experimental data analysis package for phenotype sequencing',
         long_description = __doc__,
         author = "Christopher Lee",

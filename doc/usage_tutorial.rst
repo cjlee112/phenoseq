@@ -3,32 +3,67 @@
 Basic Phenoseq User Guide
 ===========================
 
+Obtaining Phenoseq
+------------------
+
+* You can either download the latest release of Phenoseq from its
+  GitHub `downloads <https://github.com/cjlee112/phenoseq/tags>`_ page;
+
+* or you can get the very latest code commits using Git, directly
+  from the Phenoseq's `GitHub <https://github.com/cjlee112/phenoseq>`_ page.
+  (This requires using `Git <http://git-scm.com>`_).
+
+Installation
 ------------
+
+Phenoseq is a pure Python package; you need 
+`Python <http://python.org>`_ to run it.  You install Phenoseq
+by running its ``setup.py`` install script::
+
+  sudo python setup.py install
+
+(leave out ``sudo`` if you are installing to a location you have
+write privileges for).
+
+Notes:
+
+* it installs both the Phenoseq module and several
+  convenient command-line scripts for running standard
+  analyses (for details, see the examples below).
+* if you have Python
+  `setuptools <http://pypi.python.org/pypi/setuptools>`_,
+  and `pip <http://pypi.python.org/pypi/pip>`_
+  installed, the Phenoseq installer should be able to 
+  automatically install its dependencies for you (see below
+  for details).  Note that this can take several minutes!
+
 Dependencies
-------------
+............
 
-* ``scipy.stats`` is used both for scoring experimental
-  results, and for simulation.  For more information see
-  http://www.scipy.org/
+(Automatically installed, if possible.  If you need to install
+them manually, use your system's software installer tool or
+`pip <http://pypi.python.org/pypi/pip>`_.)
 
+* `numpy <http://numpy.scipy.org/>`_ and
+  `scipy <http://www.scipy.org/>`_
+  are used both for scoring experimental
+  results, and for simulation.
+  
 Other dependencies are optional, depending on what phenoseq
 functions you wish to use:
 
-* ``numpy`` is required for phenoseq simulations.
-  For more information see http://numpy.scipy.org/
-* Biopython's ``SeqIO`` module is used for reading
+* Biopython's `SeqIO <http://www.biopython.org/wiki/SeqIO>`_
+  module is used for reading
   Genbank CDS annotations for a genome, in
   :func:`analyze.read_genbank_annots()`.
-  For more information, see
-  http://www.biopython.org/wiki/SeqIO
-* ``pygr`` is used to represent gene annotation intervals
+  
+* `Pygr <https://code.google.com/p/pygr/>`_
+  is used to represent gene annotation intervals
   on a genome, for scoring experimental results.
-  You can obtain it from https://code.google.com/p/pygr/
 
 
-
-Analyzing
----------
+Analyzing a Phenotype Sequencing Experiment
+-------------------------------------------
 
 The following command line scripts are installed automatically
 when you install ``phenoseq`` (i.e. via ``python setup.py install``).
@@ -56,7 +91,7 @@ test for enrichment in::
 
     phenoseq_hypergeom -n 30 -g NC_000913.gbk -f func-associations.col -t genes.col [ACGT]*.vcf
 
-------------
+
 Simulations
 ------------
 
@@ -79,7 +114,7 @@ For example,::
     Coverage per library: 20
     Expected hits: 3.71
 
--------------------
+
 Processing Raw Data
 -------------------
 
@@ -153,50 +188,31 @@ for more information on using novoalign.
 
 
 
----------------------------
-Basic Classes and Functions
----------------------------
+Custom Analysis in the Python Interpreter
+-----------------------------------------
 
 If the default usage is not sufficent, basic access to the processed data is easy.
 
 Loading Data
-------------
+............
 
 Initially, the data must be loaded from the processed files. First, the annotated reference genome is needed to determine if mutations are synonymous and in coding regions::
 
-	>>> from analyze import *
+	>>> from phenoseq.analyze import *
 	>>> annotated_genome_filename = "NC_000913.gbk"
 	>>> annodb, al, dna = read_genbank_annots(annotated_genome_filename)
 
-This might take a couple of minutes on modest hardware. Next, read in the data from the *.vcf files. In Bash, the argument ``[ACGT]*.vcf`` (from above) expands to something like::
+This might take a couple of minutes on modest hardware. Next, read in the data from the VCF files.  In python, use::
 
-	user@home:~/phenoseq$ echo [ACGT]*.vcf
-	ACAGTG.vcf ACTTGA.vcf ATCACG.vcf CAGATC.vcf CGATGT.vcf CTTGTA.vcf GATCAG.vcf GCCAAT.vcf TGACCA.vcf TTAGGC.vcf 
-
-depending on your tags. In python, use::
-
-	>>> tag_files = ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']                                                
+	>>> import glob
+	>>> tag_files = glob.glob('*.vcf')
+        >>> tag_files
+        ['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']                                                
 	>>> snps = read_tag_files(tag_files)
-
-or obtain the list from ``sys.argv`` by passing in the parameters shown above for analyze.py::
-
-	user@home:~/phenoseq$ python2.5 - NC_000913.gbk [ACGT]*.vcf
-	Python 2.5.5 (r255:77872, Sep 14 2010, 16:22:46) 
-	[GCC 4.4.5] on linux2
-	Type "help", "copyright", "credits" or "license" for more information.
-	>>> import sys
-	>>> sys.argv
-	['-', 'NC_000913.gbk', 'ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
-	>>> annotated_genome_filename = sys.argv[1]
-	>>> tag_files = sys.argv[2:]
-	>>> annotated_genome_filename
-	'NC_000913.gbk'
-	>>> tag_files
-	['ACAGTG.vcf', 'ACTTGA.vcf', 'ATCACG.vcf', 'CAGATC.vcf', 'CGATGT.vcf', 'CTTGTA.vcf', 'GATCAG.vcf', 'GCCAAT.vcf', 'TGACCA.vcf', 'TTAGGC.vcf']
 
 
 Analyzing Data
---------------
+..............
 
 The result from any SNP reading function such as :func:`analyze.read_vcf`
 or :func:`analyze.read_tag_files` is a list of :class:`analyze.SNP` objects.
@@ -223,9 +239,9 @@ We can filter these results to just nonsynonymous SNPs::
         >>> gsd = filter_nonsyn(gsd)
 
 
----------------------
+
 Scoring Mutations
----------------------
+.................
 
 Finally, we score the genes for significant p-values::
 
