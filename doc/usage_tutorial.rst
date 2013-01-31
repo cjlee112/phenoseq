@@ -74,6 +74,16 @@ run the ``phenoseq_analyze`` command::
 
     phenoseq_analyze -g NC_000913.gbk [ACGT]*.vcf
 
+It takes the following command options:
+
+* **-g GBFILEPATH**: required genbank file containing CDS annotations.  Also
+  it uses this filename to look for a FASTA file containing the
+  reference genome (if a FASTA file path is not explicitly provided
+  by the **--fastafile** option).  Specifically, it will replace the
+  suffix of the **GBFILEPATH** with the suffix ``.fna``.
+* **--fastafile FASTAFILEPATH**: optional path to FASTA file containing
+  the reference genome sequence.
+
 For pathway phenoseq analysis, additional 
 `EcoCyc <http://ecocyc.org>`_ files are required. Specifically, the file 
 "func-associations.col" is necessary to supply the functionally associated groups, and "genes.col" 

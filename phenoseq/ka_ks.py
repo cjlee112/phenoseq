@@ -262,7 +262,7 @@ def run_all(gbfile, groupfile, transfile, tagFiles):
     # does this filter out replicates that appear in every tag?
     annodb, al, dna = analyze.read_genbank_annots(gbfile)
     snps = analyze.read_tag_files(tagFiles)
-    gsd = analyze.map_snps_chrom1(snps, al, dna)
+    gsd = analyze.map_snps(snps, al, dna)
 
     # Count nonsyn vs. syn. sites for each gene
     site_counts = genes_sites_dict(annodb)
