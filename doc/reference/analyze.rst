@@ -34,12 +34,12 @@ as potential causes of a phenotype::
 
     from phenoseq import analyze
     print 'reading gene annotations from', sys.argv[1]
-    annodb, al, dna = analyze.read_genbank_annots(sys.argv[1])
+    annodb, al, genome = analyze.read_genbank_annots(sys.argv[1])
     tagFiles = sys.argv[2:]
     print 'reading tag files:', tagFiles
     snps = analyze.read_tag_files(tagFiles)
     print 'scoring genes...'
-    results = analyze.analyze_nonsyn(snps, annodb, al, dna)
+    results = analyze.analyze_nonsyn(snps, annodb, al, genome)
     print 'top 20 hits:', results[:20]
 
 
@@ -50,7 +50,7 @@ Convenience Functions
 Complete Analysis Functions
 ...........................
 
-.. function:: analyze_nonsyn(snps, annodb, al, dna, gcTotal=None, atTotal=None, geneGCDict=None)
+.. function:: analyze_nonsyn(snps, annodb, al, genome, gcTotal=None, atTotal=None, geneGCDict=None)
 
    Filter *snps* to just those that change the amino acid sequence,
    and score genes annotated in *annodb* / *al* based on the number of
@@ -112,7 +112,7 @@ Data Reading Functions
    *kwargs*: optional arguments to be passed to the :func:`read_vcf`
    function for reading each library file.
 
-.. function:: read_genbank_annots(gbfile, fastafile=None, iseq=0, featureType='CDS')
+.. function:: read_genbank_annots(gbfile, fastafile=None, featureType='CDS', geneQualifier='gene')
 
    Constructs a (gene) annotation database from a Genbank genome file.
    NB: this assumes each gene consists of **one** interval.
@@ -126,12 +126,13 @@ Data Reading Functions
    containing the genome sequence.  If None, a path will be constructed
    automatically by replacing the *gbfile* suffix with ``.fna``.
 
-   *iseq* must be the index of the genome sequence within both *gbfile*
-   and *fastafile*, i.e. ``iseq=0`` means the first sequence in the file.
-
    *featureType* specifies the Genbank feature type to extract for
    constructing annotations.  By default, it extracts the coding sequence
    regions.
+
+   *geneQualifier* specifies the Genbank qualifier field to use
+   for extracting a gene ID for reporting purposes (e.g. printing
+   gene scores).
 
    Returns three values: 
 
@@ -140,7 +141,7 @@ Data Reading Functions
    * an alignment container storing the alignment of the annotations to
      the genome sequence.
 
-   * the genome sequence object.
+   * the genome sequence dictionary.
 
    **note**: this function requires both the BioPython ``SeqIO`` module,
    and the Pygr ``seqdb`` and ``annotation`` modules.
@@ -203,7 +204,7 @@ that pass some specified criteria.
 SNP - Gene mapping functions
 ............................
 
-.. function:: map_snps(snps, al, genome, exonGene)
+.. function:: map_snps_exons(snps, al, genome, exonGene)
 
    Maps SNPs to genes using the specified alignment to exon annotations,
    and the exon to gene mapping given by *exonGene*.  This function is
@@ -219,7 +220,7 @@ SNP - Gene mapping functions
    *exonGene*: a dictionary whose keys are exon annotation IDs, 
    and whose associated values are gene IDs.
 
-.. function:: map_snps_chrom1(snps, al, dna)
+.. function:: map_snps(snps, al, genome)
 
    Maps SNPs to genes on a single chromosome.  This function is suitable
    for single-interval gene data read by :func:`read_genbank_annots`.
@@ -229,7 +230,7 @@ SNP - Gene mapping functions
 
    *al*: an alignment of genome sequence intervals to gene annotations.
 
-   *dna*: the chromosome sequence object on which the gene annotations are aligned.
+   *genome*: a dictionary of genome sequences on which the gene annotations are aligned.
 
 
 SNP Impact filtering functions
@@ -245,7 +246,7 @@ SNP Impact filtering functions
 Gene Scoring functions
 ......................
 
-.. function:: score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None, geneGCDict=None, useBonferroni=True, dnaseq=None, annodb=None)
+.. function:: score_genes_pooled(geneSNPdict, gcTotal=None, atTotal=None, geneGCDict=None, useBonferroni=True, genome=None, annodb=None)
 
    Scores genes based on Poisson p-value for the total number of hits
    in each gene.  This is suitable for data where multiple samples were
@@ -260,7 +261,7 @@ Gene Scoring functions
 
    *gcTotal*: if not None, the count of G and C bases in the genome
    sequence.  If None, it and *atTotal* are automatically calculated from the
-   *dnaseq* sequence object passed to the constructor.
+   *genome* sequence dictionary passed to the constructor.
 
    *atTotal*: the count of A and T bases in the genome sequence.
 
@@ -273,7 +274,7 @@ Gene Scoring functions
    *useBonferroni=True* forces the function to multiply the p-values
    by the total number of genes being tested.
 
-   *dnaseq* is used to compute GC/AT base count totals if not provided 
+   *genome* is used to compute GC/AT base count totals if they are not provided 
    (see above).
 
    *annodb* is used to compute GC/AT base counts for each gene if not

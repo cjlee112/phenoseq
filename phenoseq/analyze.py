@@ -206,16 +206,19 @@ def read_genbank_annots(gbfile, fastafile=None, featureType='CDS',
     annodb = annotation.AnnotationDB({}, genome,
                                      sliceAttrDict=dict(id=0, start=1, stop=2,
                                                         orientation=3))
+    i = 0
     for s in gbseqs:
         seqID = genomeIndex[s.id].id # find the right seq and get its actual ID
-        for i,f in enumerate(s.features):
+        for f in s.features:
             if f.type == featureType:
                 try:
                     name = f.qualifiers[geneQualifier][0]
-                except KeyError:
-                    warnings.warn('Missing gene qualifier "%s" on %s annotation for sequence %s feature %d' % (geneQualifier, featureType, s.id, i))
-                else:
-                    annodb.new_annotation(name,
+                except KeyError: # keep the annotation even if label missing
+                    warnings.warn('Missing gene qualifier "%s" on %s annotation'
+                                  % (geneQualifier, featureType))
+                    name = 'unlabeled_%s_%d' % (featureType, i)
+                    i += 1
+                annodb.new_annotation(name,
                         (seqID, f.location.start.position,
                          f.location.end.position, f.strand))
     al = cnestedlist.NLMSA('tmp', 'memory', pairwiseMode=True)
