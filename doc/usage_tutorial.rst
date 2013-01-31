@@ -76,13 +76,25 @@ run the ``phenoseq_analyze`` command::
 
 It takes the following command options:
 
-* **-g GBFILEPATH**: required genbank file containing CDS annotations.  Also
+* ``-g GBFILEPATH``: required genbank file containing CDS annotations.  Also
   it uses this filename to look for a FASTA file containing the
   reference genome (if a FASTA file path is not explicitly provided
-  by the **--fastafile** option).  Specifically, it will replace the
+  by the ``--fastafile`` option).  Specifically, it will replace the
   suffix of the **GBFILEPATH** with the suffix ``.fna``.
-* **--fastafile FASTAFILEPATH**: optional path to FASTA file containing
+* ``--fastafile FASTAFILEPATH``: (optional) path to FASTA file containing
   the reference genome sequence.
+* ``--gene-qualifier GENEFIELD``: (optional) field name to use for
+  extracting gene IDs from Genbank annotations.  Its default value is "gene";
+  however, some Genbank files lack "gene" labels.  Other qualifiers that
+  may be present if "gene" is missing are: "locus_tag"; or "protein_id".
+
+Note that ``phenoseq_analyze`` extracts gene annotations (specifically,
+CDS annotations) from the supplied Genbank file, and reports their
+phenoseq scores using their associated gene IDs.  If a CDS annotation
+lacks a gene ID it will simply be reported as "unlabeled_CDS_#"
+(where # is an integer); in that case you can use the 
+``--gene-qualifier`` option (see above) to tell it how to look 
+for gene IDs.
 
 For pathway phenoseq analysis, additional 
 `EcoCyc <http://ecocyc.org>`_ files are required. Specifically, the file 
