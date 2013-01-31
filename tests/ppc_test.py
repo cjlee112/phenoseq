@@ -20,17 +20,18 @@ class Gene_Test(unittest.TestCase):
     'basic scoring tests'
 
     def setUp(self, gbfile='data/NC_000913.gbk'):
-        annodb, al, dna = analyze.read_genbank_annots(gbfile)
+        annodb, al, genome = analyze.read_genbank_annots(gbfile)
         self.annodb = annodb
         self.al = al
-        self.dna = dna
+        self.genome = genome
         self.snps = analyze.read_tag_files(vcfFiles)
-        self.gsd = analyze.map_snps_chrom1(self.snps, al, dna)
+        self.gsd = analyze.map_snps(self.snps, al, genome)
         self.gsdNS = analyze.filter_nonsyn(self.gsd)
 
     def test_gbdata(self):
         assert len(self.annodb) == 4244
-        assert len(self.dna) == 4639675
+        assert len(self.genome) == 1
+        assert len(self.genome.values()[0]) == 4639675
 
     def test_snp_reading(self):
         assert len(self.snps) == 2433
@@ -44,7 +45,7 @@ class Gene_Test(unittest.TestCase):
         assert n == 1448
         
     def test_gene_scores(self):
-        s = analyze.score_genes_pooled(self.gsdNS, dnaseq=self.dna,
+        s = analyze.score_genes_pooled(self.gsdNS, genome=self.genome,
                                        annodb=self.annodb)
         assert util.approx_equal(s[0][0], 1.36e-25)
         assert util.approx_equal(s[1][0], 8.30e-14)
@@ -54,6 +55,6 @@ class Gene_Test(unittest.TestCase):
     def test_simple_group(self):
         groups = {'foo': ['iclR', 'aceK']}
         s = analyze.score_groups_pooled(self.gsdNS, groups,
-                                        dnaseq=self.dna,
+                                        genome=self.genome,
                                         annodb=self.annodb)
         assert util.approx_equal(s[0][0], 3.58e-42)
