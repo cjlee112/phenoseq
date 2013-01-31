@@ -13,7 +13,7 @@ try:
 except ImportError:
     warnings.warn('biopython not found.  Some phenoseq functions will not work.')
 try:
-    from pygr import seqdb, annotation, cnestedlist, sequtil
+    from pygr import seqdb, annotation, cnestedlist, sequtil, blast
 except ImportError:
     warnings.warn('pygr not found.  Some phenoseq functions will not work.')
     
@@ -183,7 +183,8 @@ def read_tag_files(tagFiles, tagfunc=get_filestem, filterFunc=filter_snps,
 #######################################################################
 # gene annotation reading
 
-def read_genbank_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
+def read_genbank_annots(gbfile, fastafile=None, featureType='CDS',
+                        geneQualifier='gene'):
     '''construct annotation DB for gene CDS intervals.
     NB: this assumes each gene consists of ONE interval.
     This cannot be used for multi-exon genes!'''
@@ -193,33 +194,35 @@ def read_genbank_annots(gbfile, fastafile=None, iseq=0, featureType='CDS'):
         ifile = open(gbfile)
         try:
             gbparse = SeqIO.parse(ifile, 'genbank')
-            features = list(gbparse)[iseq].features
+            gbseqs = list(gbparse)
         finally:
             ifile.close()
     else:
-        features = list(gbparse)[iseq].features
+        gbseqs = list(gbparse)
     if fastafile is None:
         fastafile = gbfile.split('.')[0] + '.fna'
     genome = seqdb.SequenceFileDB(fastafile)
-    seqID = genome.keys()[iseq]
+    genomeIndex = blast.BlastIDIndex(genome) # handle NCBI ID blobs properly
     annodb = annotation.AnnotationDB({}, genome,
                                      sliceAttrDict=dict(id=0, start=1, stop=2,
                                                         orientation=3))
-    for f in features:
-        if f.type == featureType:
-            try:
-                name = f.qualifiers['gene'][0]
-            except KeyError:
-                pass
-            else:
-                annodb.new_annotation(name,
-                    (seqID, f.location.start.position,
-                     f.location.end.position, f.strand))
+    for s in gbseqs:
+        seqID = genomeIndex[s.id].id # find the right seq and get its actual ID
+        for i,f in enumerate(s.features):
+            if f.type == featureType:
+                try:
+                    name = f.qualifiers[geneQualifier][0]
+                except KeyError:
+                    warnings.warn('Missing gene qualifier "%s" on %s annotation for sequence %s feature %d' % (geneQualifier, featureType, s.id, i))
+                else:
+                    annodb.new_annotation(name,
+                        (seqID, f.location.start.position,
+                         f.location.end.position, f.strand))
     al = cnestedlist.NLMSA('tmp', 'memory', pairwiseMode=True)
     for a in annodb.itervalues():
         al.addAnnotation(a)
     al.build()
-    return annodb, al, genome[seqID]
+    return annodb, al, genome
 
 
 def read_known_genes(path, sep='\t'):
@@ -299,24 +302,33 @@ def calc_gc(s):
     atTotal = len(s) - gcTotal
     return gcTotal, atTotal
 
+def calc_gc_sum(genomeDB):
+    'calc GC and AT counts summed over all seqs in genomeDB'
+    gcTotal, atTotal = (0, 0)
+    for seq in genomeDB.itervalues():
+        t = calc_gc(str(seq))
+        gcTotal += t[0]
+        atTotal += t[1]
+    return gcTotal, atTotal
+
 def calc_gene_gc(annodb, geneID):
     'get GC, AT counts for specified gene'
     ann = annodb[geneID]
     return calc_gc(str(ann.sequence))
 
 
-def get_gc_totals(annodb, dna):
+def get_gc_totals(annodb, genomeDB):
     'get GC/AT counts for whole genome and for individual genes in annodb'
-    gcTotal, atTotal = calc_gc(str(dna))
+    gcTotal, atTotal = calc_gc_sum(genomeDB)
     geneGCDict = {}
     for geneID in annodb:
         geneGCDict[geneID] = calc_gene_gc(annodb, geneID)
     return gcTotal, atTotal, geneGCDict
 
 
-def gc_gene_sizes(annodb, dna, gcBias=36.):
+def gc_gene_sizes(annodb, genomeDB, gcBias=36.):
     'return GC-bias weighted sizes for whole genome and each gene'
-    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, genomeDB)
     total = gcTotal * gcBias + atTotal 
     l = []
     for gc, at in geneGCDict.values():
@@ -329,7 +341,7 @@ def gc_gene_sizes(annodb, dna, gcBias=36.):
 #######################################################################
 # snp mapping and impact filtering functions
 
-def map_snps(snps, al, genome, exonGene):
+def map_snps_exons(snps, al, genome, exonGene):
     '''map snps to genes, returning dict of {gene:[snp1, snp2, ...]}.
     NB: this assumes al contains mapping to exon annotations, whose
     IDs can be mapped to gene IDs by exonGene.'''
@@ -346,14 +358,13 @@ def map_snps(snps, al, genome, exonGene):
     return geneSNP
 
 
-def map_snps_chrom1(snps, al, dna):
-    '''map snps to genes, returning dict of {gene:[snp1, snp2, ...]}.
-    NB: this assumes all snps map on a single chromosome!'''
+def map_snps(snps, al, genome):
+    '''map snps to genes, returning dict of {gene:[snp1, snp2, ...]}.'''
     d = {}
     for snp in snps:
         try:
-            geneSNP = al[dna[snp.pos - 1:snp.pos]].keys()[0]
-        except IndexError:
+            geneSNP = al[genome[snp.chrom][snp.pos - 1:snp.pos]].keys()[0]
+        except (KeyError,IndexError):
             pass
         else:
             if geneSNP.orientation < 0:
@@ -418,13 +429,13 @@ def score_pooled(regionSNPs, regionXS, useBonferroni=True):
 class GeneCrossSection(object):
     'object acts as dict for computing gene cross-section'
     def __init__(self, geneSNPdict, gcTotal=None, atTotal=None,
-                 geneGCDict=None, dnaseq=None, annodb=None):
+                 geneGCDict=None, genome=None, annodb=None):
         self.geneSNPdict = geneSNPdict
         self.geneGCDict = geneGCDict
         self.annodb = annodb
-        self.dnaseq = dnaseq
+        self.genome = genome
         if gcTotal is None:
-            gcTotal, atTotal = calc_gc(str(dnaseq))
+            gcTotal, atTotal = calc_gc_sum(genome)
         nGC = nAT = 0
         for snps in geneSNPdict.values(): # GC vs AT SNP totals
             for snp in snps:
@@ -514,16 +525,16 @@ def score_genes(geneSNPdict, nsample, totalSize, geneLengths,
 # for generating subsets of the experimental data and analyzing
 # results that would be obtained from those subsets.
 
-def generate_subsets(tagFiles, annodb, al, dna, nbest=None, *args):
+def generate_subsets(tagFiles, annodb, al, genome, nbest=None, *args):
     'generate results from all possible subsets of tagFiles'
     d = {}
-    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, genome)
     for i in range(1, pow(2, len(tagFiles))):
         print 'subset', i
         l = [tagFile for (j, tagFile) in enumerate(tagFiles)
              if i & pow(2, j)]
         snps = read_tag_files(l, *args)
-        results = analyze_nonsyn(snps, annodb, al, dna,
+        results = analyze_nonsyn(snps, annodb, al, genome,
                                  gcTotal, atTotal, geneGCDict)
         d[tuple([s.split('.')[0] for s in l])] = results[:nbest]
     return d
@@ -535,14 +546,14 @@ def get_pool_tags(poolFile):
     return tuple([l[i] for i in range(0, len(l), 2)])
 
 
-def process_pools(poolFiles, annodb, al, dna, tagFunc=get_pool_tags,
+def process_pools(poolFiles, annodb, al, genome, tagFunc=get_pool_tags,
                   nbest=None, *args):
     'generate results for a list of pool files'
     d = {}
-    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, genome)
     for poolFile in poolFiles:
         snps = read_vcf_singleton(poolFile)
-        results = analyze_nonsyn(snps, annodb, al, dna,
+        results = analyze_nonsyn(snps, annodb, al, genome,
                                  gcTotal, atTotal, geneGCDict)
         d[tagFunc(poolFile)] = results[:nbest]
     return d
@@ -567,19 +578,19 @@ def enumerate_pool_subsets(poolFiles, n, tagFunc=get_pool_tags, d=None):
                 d.remove(tag)
 
 
-def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
+def generate_pool_subsets(poolFiles, npools, annodb, al, genome,
                           tagfunc=lambda s:s,
                           replicatefunc=lambda s:(), minRep=0,
                           nbest=None, *args):
     'run phenoseq analysis on all disjoint pool combinations'
     d = {}
-    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, dna)
+    gcTotal, atTotal, geneGCDict = get_gc_totals(annodb, genome)
     for i in npools:
         for pfiles in enumerate_pool_subsets(poolFiles, i):
             print 'analyzing', pfiles
             snps = read_tag_files(pfiles, tagfunc, replicatefunc,
                                      minRep, *args)
-            results = analyze_nonsyn(snps, annodb, al, dna,
+            results = analyze_nonsyn(snps, annodb, al, genome,
                                      gcTotal, atTotal, geneGCDict)
             k = reduce(lambda x,y:x + y, [get_pool_tags(t) for t in pfiles])
             d[k] = results[:nbest]
@@ -590,19 +601,19 @@ def generate_pool_subsets(poolFiles, npools, annodb, al, dna,
 #######################################################################
 # simple examples of how to run a complete analysis
 
-def analyze_nonsyn(snps, annodb, al, dna, **kwargs):
+def analyze_nonsyn(snps, annodb, al, genome, **kwargs):
     'scores genes based on non-synonymous SNPs only'
-    gsd = map_snps_chrom1(snps, al, dna)
+    gsd = map_snps(snps, al, genome)
     gsd = filter_nonsyn(gsd)
-    return score_genes_pooled(gsd, dnaseq=dna, annodb=annodb,
+    return score_genes_pooled(gsd, genome=genome, annodb=annodb,
                               **kwargs)
 
-def analyze_nonsyn_groups(groups, snps, annodb, al, dna,
+def analyze_nonsyn_groups(groups, snps, annodb, al, genome,
                           **kwargs):
     'scores groups based on non-synonymous SNPs only'
-    gsd = map_snps_chrom1(snps, al, dna)
+    gsd = map_snps(snps, al, genome)
     gsd = filter_nonsyn(gsd)
-    return score_groups_pooled(gsd, groups, dnaseq=dna,
+    return score_groups_pooled(gsd, groups, genome=genome,
                                annodb=annodb, **kwargs)
 
 
@@ -611,7 +622,7 @@ def analyze_monodom(genome, vcfFiles=glob.glob('*.vcf'),
     snps = read_tag_files(vcfFiles, filterFunc=None, add_attrs=None)
     annodb, al, exonGene, totalSize, geneLengths = \
             read_exon_annots(genome, genesFile)
-    gsd = map_snps(snps, al, genome, exonGene)
+    gsd = map_snps_exons(snps, al, genome, exonGene)
     return score_genes(gsd, len(vcfFiles), totalSize, geneLengths)
 
 
@@ -623,32 +634,39 @@ def parse_args():
     parser = OptionParser(usage=usage)
     parser.add_option("-g", "--genbank", dest="gbfile",
                     help="Genbank filename of reference genome")
+    parser.add_option(
+        '--gene-qualifier', action="store", type="string",
+        dest="geneQualifier", default='gene',
+        help="Genbank CDS qualifier field to use as gene name")
+    parser.add_option(
+        '--fastafile', action="store", type="string",
+        dest="fastafile", default=None,
+        help="optional path to FASTA file for reference genome")
     (options, tagFiles) = parser.parse_args()
 
     if len(tagFiles) < 1:
         parser.error("vcf files are required")
 
-    gbfile = options.gbfile
-
-    if not gbfile:
-        print "Missing required files. Try --help for more information."
+    if not options.gbfile:
+        print "You must supply a Genbank file. Try --help for more information."
         exit()
-    return gbfile, tagFiles
+    return options, tagFiles
 
-def analyze_cmd(gbfile, tagFiles):
+def analyze_cmd(gbfile, tagFiles, **kwargs):
 
     print 'reading gene annotations from', gbfile
-    annodb, al, dna = read_genbank_annots(gbfile)
+    annodb, al, genome = read_genbank_annots(gbfile, **kwargs)
     print 'reading tag files:', tagFiles
     snps = read_tag_files(tagFiles)
     print 'scoring genes...'
-    results = analyze_nonsyn(snps, annodb, al, dna)
+    results = analyze_nonsyn(snps, annodb, al, genome)
     print 'top 20 hits:', results[:20]
 
 def main():
     # entry point for phenoseq_analyze command defined in setup.py
-    gbfile, tagFiles = parse_args()
-    analyze_cmd(gbfile, tagFiles)
+    options, tagFiles = parse_args()
+    analyze_cmd(options.gbfile, tagFiles, fastafile=options.fastafile,
+                geneQualifier=options.geneQualifier)
 
 if __name__ == '__main__':
     main()
