@@ -13,6 +13,11 @@ class Command_Test(unittest.TestCase):
         subprocess.check_output(['phenoseq_analyze', '-g', 'data/NC_000913.gbk']
                                 + self.vcfFiles)
 
+    def test_analyze2(self):
+        subprocess.check_output(['phenoseq_analyze', '-g', 'data/NC_000913.gbk',
+                                 '--fastafile', 'data/NC_000913.fna']
+                                + self.vcfFiles)
+
     def test_cost(self):
         subprocess.check_output(['phenoseq_cost', '20', '30', '1000',
                                  '50', '5'])
