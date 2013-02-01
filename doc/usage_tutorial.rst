@@ -222,7 +222,7 @@ Initially, the data must be loaded from the processed files. First, the annotate
 
 	>>> from phenoseq.analyze import *
 	>>> annotated_genome_filename = "NC_000913.gbk"
-	>>> annodb, al, dna = read_genbank_annots(annotated_genome_filename)
+	>>> annodb, al, genome = read_genbank_annots(annotated_genome_filename)
 
 This might take a couple of minutes on modest hardware. Next, read in the data from the VCF files.  In python, use::
 
@@ -248,7 +248,7 @@ object obtained above, which maps sequence intervals to gene CDS intervals.
 Here's a simple example that assumes all the SNPs map on one DNA sequence 
 (e.g. a microbial genome)::
 
-        >>> gsd = map_snps_chrom1(snps, al, dna)
+        >>> gsd = map_snps(snps, al, genome)
 
 The result is a gene:snp dictionary, whose keys are gene IDs,
 and whose values are lists of SNPs found in that gene::
@@ -267,7 +267,7 @@ Scoring Mutations
 
 Finally, we score the genes for significant p-values::
 
-        >>> scores = score_genes_pooled(gsd, dnaseq=dna, annodb=annodb)
+        >>> scores = score_genes_pooled(gsd, genome=genome, annodb=annodb)
 	>>> for hit in scores:
 	...     print hit
 	... 
