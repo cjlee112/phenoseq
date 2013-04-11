@@ -75,6 +75,11 @@ def check_deps(ignore_pygr=False):
     return deps
 
 def pip_install(pkg):
+    '''try to run pip install in a separate process.  Hmm, this used to
+    work great, but now scipy, biopython auto-installs fail if we
+    used this method to install numpy (even though numpy imports
+    fine, seems to work fine).  But if we run pip install numpy
+    *by hand*, everything works great. AAAAAAAAARRRRRRRRRRGGGGGGGGGHHHHHHH!'''
     try:
         subprocess.check_output(['pip', 'install', pkg])
         return True
@@ -87,8 +92,25 @@ def numpy_install_kluge():
         import numpy
         return True # already installed
     except ImportError:
-        warnings.warn('Trying to install numpy using pip...')
-        return pip_install('numpy') # see if pip can install it
+        print '''Your environment lacks numpy, required for phenoseq.'''
+        try:
+            subprocess.check_output(['pip', '--help'])
+            print '''Fortunately, it can be installed using pip.
+            Type the following command, then re-run the phenoseq installer:
+
+            pip install numpy'''
+        except subprocess.CalledProcessError:
+            print """Unable to locate pip, so unable to install numpy for you.
+            Please install numpy before proceeding.  You may do so using
+            Python's pip installer, your system's package manager,
+            or by downloading it yourself.  Once numpy is installed,
+            re-run the phenoseq installer."""
+        sys.exit() # just continuing with install doesn't work; restart.
+        ## warnings.warn('Trying to install numpy using pip.  This may take a while...')
+        ## if pip_install('numpy'): # see if pip can install it
+        # not sure why, but if setup.py runs pip, the subsequent scipy
+        # install fails, whereas if the user runs pip, everything is fine!
+
 
 def try_install(**kwargs):
     'try to install phenoseq using setup()'
