@@ -205,4 +205,19 @@ Convenience Functions
    ``cutoff`` is the number of reads required to report a mutation
    at a given nucleotide.
 
+.. function:: min_cost(nstrain=32, laneCov=4300, laneCost=800., libCost=50., ntarget=5, epsilon=0.01, n=1000, nmut=50, ngene=4200, ntotal=4.64e+06, threshold=0.98, nwait=4, mutFac=3.)
+
+   Find the lowest cost pooling strategy for the specified experiment 
+   parameters.  In addition to the parameters accepted by 
+   :func:`simulate.optimal_yield()` as described above, it
+   also takes the following parameters:
+
+   * *laneCov*: the coverage level of for your genome given by a
+     single lane of sequencing (i.e. average
+     number of reads covering any given nucleotide position in the
+     genome).
+   * *laneCost*: cost for one lane.
+   * *libCost*: cost for one library prep.
+   * *n*: number of simulations to run for estimating average discovery yield
+     of a single pooling strategy.
 

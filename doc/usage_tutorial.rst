@@ -136,6 +136,64 @@ For example,::
     Coverage per library: 20
     Expected hits: 3.71
 
+Graphing the yield-per-cost curve
+.................................
+
+You can of course call phenoseq functions directly to 
+perform simulations and experiment design optimizations.
+As an example, let's plot the yield-per-cost curve at different
+levels of mutagenesis for optimal experiment designs
+(i.e. the pooling design that has the lowest cost per yield).
+We can do this by calling :func:`simulate.min_cost()` to
+find the lowest cost pooling design (and its target gene
+discovery yield) for a given set of experimental parameters
+(number of strains, density of mutagenesis, etc.).
+We can plot this over a wide range of experiment sizes
+(number of strains sequenced), and compare the resulting
+curves for different assumed mutagenesis densities::
+
+  from phenoseq import simulate
+  from matplotlib import pyplot
+
+  def onelib_cost_fig(nstrains=range(3, 34, 3),
+                      xlabel=r'experiment cost (\$)',
+                      ylabel='average number real targets identified',
+                      plotargs={}, **kwargs):
+      'plot experiment cost vs. yield over a range of nstrain values'
+      l = []
+      costs = []
+      for nstrain in range(nstrains):
+          cost, nlib, cov, y = simulate.min_cost(nstrain, **kwargs)
+          l.append(y)
+          costs.append(cost)
+      pyplot.plot(costs, l, **plotargs)
+      pyplot.xlabel(xlabel)
+      pyplot.ylabel(ylabel)
+      return l
+
+  def onelib_model_cost_fig(*args, **kwargs):
+      onelib_cost_fig(plotargs=dict(marker='+'), **kwargs)
+      onelib_cost_fig(nmut=20, plotargs=dict(marker='o'), **kwargs)
+      onelib_cost_fig(nmut=100, plotargs=dict(marker='^'), **kwargs)
+
+  onelib_model_cost_fig(laneCost=800., libCost=50.)
+  pyplot.show()
+
+A version of this example script, modified to make use of
+``multiprocessing`` support for multiple CPUs, is in the
+``phenoseq/examples/plot_cost.py`` file included with the
+distribution.  It produces the following figure:
+
+.. figure:: model_cost_fig_updated.png
+
+   *Yield-per-cost curve for 3 - 34 mutant strains*
+
+   Separate curves for 20 mutations per genome (green circles,
+   dashed line); 50 mutations / genome (blue crosses);
+   100 mutations per genome (red triangles, dotted line).  The experiment 
+   cost is based on $50 per library and $800 per lane (20 Gb; only
+   includes the fractional lane cost used by the experiment).
+
 
 Processing Raw Data
 -------------------
